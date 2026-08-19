@@ -105,16 +105,31 @@ export async function login(username: string, password: string) {
   return body as Session;
 }
 
-export function money(value: number | string | null | undefined, currency = "USD") {
-  const amount = Number(value ?? 0);
-  const formatted = new Intl.NumberFormat("ar-SY", {
+// Digits are always Western Arabic (0-9), never Arabic-Indic. The `-u-nu-latn`
+// extension keeps the Arabic month names while forcing Latin numerals.
+const NUMBER_LOCALE = "en-US";
+const DATE_LOCALE = "ar-SY-u-nu-latn";
+
+export function formatNumber(value: number | string | null | undefined, decimals = 0) {
+  return new Intl.NumberFormat(NUMBER_LOCALE, {
     minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(amount);
-  return `${formatted} ${currency}`;
+    maximumFractionDigits: decimals,
+  }).format(Number(value ?? 0));
+}
+
+export function money(value: number | string | null | undefined, currency = "USD") {
+  return `${formatNumber(value, 2)} ${currency}`;
 }
 
 export function formatDate(value: string | null | undefined) {
   if (!value) return "—";
-  return new Intl.DateTimeFormat("ar-SY", { dateStyle: "medium" }).format(new Date(value));
+  return new Intl.DateTimeFormat(DATE_LOCALE, { dateStyle: "medium" }).format(new Date(value));
+}
+
+export function formatDateTime(value: string | null | undefined) {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat(DATE_LOCALE, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
 }

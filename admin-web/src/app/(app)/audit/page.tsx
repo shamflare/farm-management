@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, formatDateTime } from "@/lib/api";
 
 type Log = {
   id: string;
@@ -88,7 +88,7 @@ export default function AuditPage() {
             {rows.map((log) => (
               <Fragment key={log.id}>
                 <tr style={{ cursor: "pointer" }} onClick={() => setExpanded(expanded === log.id ? null : log.id)}>
-                  <td className="muted">{new Date(log.created_at).toLocaleString("ar-SY")}</td>
+                  <td className="muted">{formatDateTime(log.created_at)}</td>
                   <td>{log.user_name || "النظام"}</td>
                   <td><span className="badge">{ACTION_LABEL[log.action] ?? log.action}</span></td>
                   <td className="muted">{log.entity}</td>
