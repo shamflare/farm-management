@@ -90,6 +90,22 @@ class PartyAdminTests(TestCase):
         self.assertTrue(Party.all_objects.filter(id=worker.id).exists())
         self.assertEqual(LedgerLine.objects.count(), lines_before)
 
+    def test_a_partner_who_took_everything_back_can_be_removed(self):
+        """Capital and drawings are one stake: 100 in, 100 out, nothing held."""
+        from apps.operations.services import contribute_capital, withdraw_capital
+
+        partner = create_party(self.farm, kind=PartyKind.PARTNER, name="شريك مؤقت")
+        contribute_capital(
+            self.farm, date=TODAY, amount=1000, partner=partner, into_account=cash(self.farm)
+        )
+        blocked = self.client.delete(f"/api/v1/parties/{partner.id}/")
+        self.assertEqual(blocked.status_code, 400)
+
+        withdraw_capital(
+            self.farm, date=TODAY, amount=1000, partner=partner, from_account=cash(self.farm)
+        )
+        self.assertEqual(self.client.delete(f"/api/v1/parties/{partner.id}/").status_code, 204)
+
     def test_deactivating_hides_a_party_without_deleting_it(self):
         supplier = create_party(self.farm, kind=PartyKind.SUPPLIER, name="مورد قديم")
         response = self.client.patch(
@@ -112,3 +128,21 @@ class PartyAdminTests(TestCase):
         self.assertEqual(
             client.patch(f"/api/v1/parties/{party.id}/", {"name": "x"}, format="json").status_code, 403
         )
+
+    def test_a_partner_statement_reports_withdrawals_as_money_taken_out(self):
+        """Drawings read as a positive amount withdrawn, and reduce the stake."""
+        from apps.operations.services import contribute_capital, withdraw_capital
+        from apps.parties.services import party_summary
+
+        partner = create_party(self.farm, kind=PartyKind.PARTNER, name="شريك")
+        contribute_capital(
+            self.farm, date=TODAY, amount=1000, partner=partner, into_account=cash(self.farm)
+        )
+        withdraw_capital(
+            self.farm, date=TODAY, amount=400, partner=partner, from_account=cash(self.farm)
+        )
+
+        summary = party_summary(partner)
+        self.assertEqual(summary["capital_contributed"], Decimal("1000"))
+        self.assertEqual(summary["drawings"], Decimal("400"))
+        self.assertEqual(summary["net_capital"], Decimal("600"))

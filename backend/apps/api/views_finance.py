@@ -50,6 +50,9 @@ from apps.parties.services import (
 )
 
 
+ZERO = Decimal("0")
+
+
 def pick(model, farm, value, label):
     """Resolve an id inside the current farm, or fail with a clear message."""
     if not value:
@@ -298,17 +301,20 @@ class PartyViewSet(FarmScopedViewSet):
         settled-looking list that quietly drops a 2,200 debt is worse than an
         error message. Deactivating is the safe alternative and stays available.
         """
-        outstanding = []
-        for slot, label in (
-            ("receivable_account", "ذمم مدينة"),
-            ("payable_account", "ذمم دائنة"),
-            ("capital_account", "رأس مال"),
-            ("drawings_account", "مسحوبات"),
-            ("cash_account", "عهدة نقدية"),
-        ):
-            account = getattr(instance, slot, None)
-            if account is not None and account.balance() != 0:
-                outstanding.append(f"{label}: {account.balance()}")
+        # One rule, shared with the screen that draws the lock icon: capital and
+        # drawings are two halves of one stake, so a partner who put in 100 and
+        # took out 100 holds nothing and may be removed.
+        summary = party_summary(instance)
+        outstanding = [
+            f"{label}: {summary[key]}"
+            for key, label in (
+                ("owed_to_farm", "ذمم مدينة"),
+                ("owed_by_farm", "ذمم دائنة"),
+                ("net_capital", "رأس مال قائم"),
+                ("cash_held", "عهدة نقدية"),
+            )
+            if summary[key] != ZERO
+        ]
         if outstanding:
             raise ValidationError(
                 {

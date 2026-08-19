@@ -155,8 +155,14 @@ def party_summary(party):
     owed_to_farm = party.receivable_account.balance() if party.receivable_account_id else ZERO
     owed_by_farm = party.payable_account.balance() if party.payable_account_id else ZERO
     capital = party.capital_account.balance() if party.capital_account_id else ZERO
-    drawings = party.drawings_account.balance() if party.drawings_account_id else ZERO
     wallet = party.cash_account.balance() if party.cash_account_id else ZERO
+
+    # Drawings is a contra-equity account: taking money out debits it, so its
+    # natural balance runs negative. Flip the sign to report "how much was
+    # withdrawn" as a positive figure, then subtract it from what was put in.
+    drawings_balance = party.drawings_account.balance() if party.drawings_account_id else ZERO
+    drawings = -drawings_balance
+
     return {
         "party_id": str(party.id),
         "name": party.name,
@@ -165,7 +171,6 @@ def party_summary(party):
         "owed_by_farm": owed_by_farm,
         "capital_contributed": capital,
         "drawings": drawings,
-        # Drawings are an equity contra account, so net capital subtracts them.
         "net_capital": capital - drawings,
         "cash_held": wallet,
         "ownership_percentage": party.ownership_percentage,

@@ -37,14 +37,7 @@ const KIND_LABEL: Record<string, string> = {
   other: "أخرى",
 };
 
-const KINDS = ["", "partner", "worker", "supplier", "customer"];
-
-/** A person with any open balance must not be hidden from the list. */
-function hasOpenBalance(summary: Summary) {
-  return Boolean(
-    summary.owed_to_farm || summary.owed_by_farm || summary.net_capital || summary.drawings
-  );
-}
+const KINDS = ["all", "partner", "worker", "supplier", "customer"];
 
 export default function PartiesPage() {
   const { can, currency } = useApp();
@@ -102,11 +95,33 @@ export default function PartiesPage() {
     }
   }
 
+  /** Why this person cannot be removed, in the owner's own terms.
+   *  An empty list means the account is settled and the row is safe to hide. */
+  function blockingBalances(party: Party) {
+    const s = party.summary;
+    const reasons: string[] = [];
+    if (s.owed_to_farm) reasons.push(`لك عنده ${money(s.owed_to_farm, currency)} لم تُحصّل`);
+    if (s.owed_by_farm) reasons.push(`له عليك ${money(s.owed_by_farm, currency)} لم تُسدَّد`);
+    if (s.net_capital) reasons.push(`رأس مال قائم في المزرعة ${money(s.net_capital, currency)}`);
+    return reasons;
+  }
+
   async function remove(party: Party) {
-    if (hasOpenBalance(party.summary)) {
-      setError(
-        `لا يمكن حذف «${party.name}» لوجود رصيد مفتوح. سدّد الرصيد أولًا، أو عطّل الحساب بدل حذفه.`
+    const reasons = blockingBalances(party);
+    if (reasons.length) {
+      const offer = party.is_active
+        ? `
+
+اضغط «موافق» لتعطيله بدل حذفه: يختفي من قوائم الاختيار ويبقى رصيده ظاهرًا في التقارير.`
+        : "";
+      const proceed = window.confirm(
+        `تعذّر حذف «${party.name}» لأن حسابه ليس صفرًا:
+
+${reasons.join("  ·  ")}
+
+الحذف يُخفي الشخص من القوائم بينما يبقى المبلغ في الدفتر بلا صاحب واضح، لذلك يُسدَّد الرصيد أولًا (أو تُسحب مساهمة الشريك) ثم يُحذف.${offer}`
       );
+      if (proceed && party.is_active) await toggleActive(party);
       return;
     }
     if (!window.confirm(`حذف «${party.name}»؟ حركاته السابقة تبقى في الدفتر ولن تُمس.`)) return;
@@ -186,8 +201,12 @@ export default function PartiesPage() {
 
       <div className="tabs">
         {KINDS.map((value) => (
-          <button key={value} className={`tab ${kind === value ? "active" : ""}`} onClick={() => setKind(value)}>
-            {value ? KIND_LABEL[value] : "الكل"}
+          <button
+            key={value}
+            className={`tab ${kind === (value === "all" ? "" : value) ? "active" : ""}`}
+            onClick={() => setKind(value === "all" ? "" : value)}
+          >
+            {value === "all" ? "الكل" : KIND_LABEL[value]}
           </button>
         ))}
       </div>
@@ -211,7 +230,7 @@ export default function PartiesPage() {
             {rows.length === 0 && <tr><td colSpan={9} className="empty">لا توجد سجلات</td></tr>}
             {rows.map((party) => {
               const s = party.summary;
-              const locked = hasOpenBalance(s);
+              const locked = blockingBalances(party).length > 0;
               return (
                 <tr key={party.id} style={party.is_active ? undefined : { opacity: 0.55 }}>
                   <td style={{ fontWeight: 600 }}>
@@ -256,12 +275,15 @@ export default function PartiesPage() {
                     )}
                     {can("parties.delete") && (
                       <button
-                        className="btn btn-sm btn-danger"
+                        className={`btn btn-sm ${locked ? "btn-ghost" : "btn-danger"}`}
                         onClick={() => remove(party)}
-                        disabled={locked}
-                        title={locked ? "لا يمكن الحذف: يوجد رصيد مفتوح" : "حذف السجل"}
+                        title={
+                          locked
+                            ? "حسابه ليس صفرًا — اضغط لمعرفة السبب والبديل"
+                            : "حذف السجل"
+                        }
                       >
-                        حذف
+                        {locked ? "🔒 حذف" : "حذف"}
                       </button>
                     )}
                   </td>
@@ -273,8 +295,10 @@ export default function PartiesPage() {
       </div>
 
       <p className="page-sub" style={{ marginTop: 12 }}>
-        الحذف لا يمس الدفتر: القيود وكشوف الحسابات تبقى كما هي. ومن عليه أو له رصيد لا يُحذف حتى
-        يُسدَّد — عطّله بدل ذلك ليختفي من القوائم الجديدة.
+        🔒 يعني أن حساب الشخص ليس صفرًا: له أو عليه مبلغ، أو له رأس مال في المزرعة. اضغط الزر
+        لترى المبلغ بالضبط. لتتمكن من الحذف: سدّد أو حصّل الرصيد (وللشريك اسحب مساهمته) — أو
+        عطّله فيختفي من قوائم الاختيار ويبقى رصيده ظاهرًا في التقارير. الحذف نفسه لا يمس الدفتر:
+        القيود وكشوف الحسابات تبقى كما هي.
       </p>
 
       {statement && (
