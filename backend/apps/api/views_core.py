@@ -291,9 +291,12 @@ class ThemePublishView(APIView):
         farm = resolve_farm(request)
         try:
             theme = theme_services.publish(farm, actor=request.user)
-        except DjangoValidationError as exc:
+        except DjangoValidationError:
+            # Re-validate so the client gets structured {field, message} rows
+            # instead of Django's stringified error list.
+            problems = theme_services.validate_theme(theme_services.get_draft(farm))
             return Response(
-                {"ok": False, "problems": exc.message_dict.get("theme", [])},
+                {"ok": False, "problems": problems},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return ok({"theme": ThemeSerializer(theme).data, "tokens": theme.token_payload()})
