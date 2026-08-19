@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import Q
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
@@ -31,7 +32,13 @@ from apps.api.serializers import (
 from apps.catalog.models import CatalogItem
 from apps.core.models import Currency
 from apps.ledger import services as ledger_services
-from apps.ledger.models import Account, ApprovalRule, EntryStatus, JournalEntry
+from apps.ledger.models import (
+    Account,
+    AccountType,
+    ApprovalRule,
+    EntryStatus,
+    JournalEntry,
+)
 from apps.operations import services as ops
 from apps.operations.models import AnimalPurchase, AnimalSale
 from apps.parties.models import Party, PartyKind
@@ -72,6 +79,10 @@ class AccountViewSet(FarmScopedViewSet):
     required_permissions = {
         "list": "finance.view",
         "retrieve": "finance.view",
+        "statement": "finance.view",
+        "balances": "finance.view",
+        # Naming an account is not the same as seeing its balance.
+        "pickable": "finance.create",
         "default": "settings.edit",
     }
 
@@ -102,6 +113,31 @@ class AccountViewSet(FarmScopedViewSet):
                     for row in result["rows"]
                 ],
             }
+        )
+
+    @action(detail=False, methods=["get"])
+    def pickable(self, request):
+        """Accounts a person may charge, without revealing what is in them.
+
+        A worker recording an expense has to say which box paid, but has no
+        business knowing the box holds 9,045.
+        """
+        rows = (
+            Account.objects.filter(farm=self.farm, is_active=True)
+            .filter(Q(is_cash=True) | Q(type=AccountType.EXPENSE))
+            .order_by("type", "code")
+        )
+        return ok(
+            [
+                {
+                    "id": str(account.id),
+                    "code": account.code,
+                    "display_name": account.display_name,
+                    "type": account.type,
+                    "is_cash": account.is_cash,
+                }
+                for account in rows
+            ]
         )
 
     @action(detail=False, methods=["get"])
@@ -221,6 +257,9 @@ class PartyViewSet(FarmScopedViewSet):
         "update": "parties.edit",
         "partial_update": "parties.edit",
         "destroy": "parties.delete",
+        # A worker must be able to say "I paid for this" without being able to
+        # read everyone's balances.
+        "pickable": "finance.create",
         "default": "parties.view",
     }
 
@@ -314,6 +353,17 @@ class PartyViewSet(FarmScopedViewSet):
                     for section in result["sections"]
                 ],
             }
+        )
+
+    @action(detail=False, methods=["get"])
+    def pickable(self, request):
+        """Names a person may charge an expense to, with no financial detail."""
+        rows = Party.objects.filter(farm=self.farm, is_active=True).order_by("kind", "name")
+        return ok(
+            [
+                {"id": str(party.id), "name": party.name, "kind": party.kind}
+                for party in rows
+            ]
         )
 
     @action(detail=False, methods=["get"])

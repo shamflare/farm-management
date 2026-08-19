@@ -1,5 +1,7 @@
 """Identity, configuration, theme and audit endpoints."""
+from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import ValidationError
@@ -9,7 +11,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from apps.accounts.models import Membership, Permission, Role
+from apps.accounts.models import Membership, Permission, Role, User
 from apps.api.mixins import FarmScopedViewSet, ok
 from apps.api.permissions import FarmPermission, resolve_farm
 from apps.api.serializers import (
@@ -18,16 +20,20 @@ from apps.api.serializers import (
     CatalogTypeSerializer,
     FarmSerializer,
     FieldDefinitionSerializer,
+    MemberCreateSerializer,
     MembershipSerializer,
+    PasswordResetSerializer,
     PermissionSerializer,
     RoleSerializer,
     ThemeSerializer,
     UserSerializer,
 )
-from apps.audit.models import AuditLog
+from apps.audit.models import AuditAction, AuditLog
+from apps.audit.services import record
 from apps.catalog.models import CatalogItem, CatalogType
 from apps.core.models import Farm
 from apps.customfields.models import FieldDefinition
+from apps.parties.models import Party
 from apps.theme import services as theme_services
 
 
@@ -144,8 +150,10 @@ class CatalogItemViewSet(FarmScopedViewSet):
     audit_entity = "catalog_item"
     audit_fields = ("code", "name", "name_ar", "is_active", "sort_order")
     required_permissions = {
-        "list": "settings.view",
-        "retrieve": "settings.view",
+        # Reading the lists is not a privilege: every form in the app - even the
+        # worker's "add animal" screen - needs them to render its dropdowns.
+        "list": None,
+        "retrieve": None,
         "default": "settings.edit",
     }
 
@@ -171,8 +179,10 @@ class FieldDefinitionViewSet(FarmScopedViewSet):
     audit_entity = "field_definition"
     audit_fields = ("key", "label_ar", "is_required", "is_visible", "sort_order", "field_type")
     required_permissions = {
-        "list": "settings.view",
-        "retrieve": "settings.view",
+        # Same reasoning as the catalog: this *is* the form layout.
+        "list": None,
+        "retrieve": None,
+        "form": None,
         "default": "settings.edit",
     }
 
@@ -216,6 +226,8 @@ class RoleViewSet(FarmScopedViewSet):
 
 
 class MembershipViewSet(FarmScopedViewSet):
+    """Who can sign in to this farm, as what, and as whose file."""
+
     serializer_class = MembershipSerializer
     queryset = Membership.objects.select_related("user", "role").all()
     audit_entity = "membership"
@@ -223,8 +235,128 @@ class MembershipViewSet(FarmScopedViewSet):
     required_permissions = {
         "list": "users.view",
         "retrieve": "users.view",
+        "create": "users.create",
+        "set_password": "users.edit",
+        "destroy": "users.delete",
         "default": "users.edit",
     }
+
+    def create(self, request, *args, **kwargs):
+        """Create the login and the membership together.
+
+        A partner or a worker gets their own username and password here; there
+        is no shared account, because the audit trail has to name one person.
+        """
+        payload = MemberCreateSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        data = payload.validated_data
+        farm = self.farm
+
+        role = Role.objects.filter(farm=farm, id=data["role_id"]).first()
+        if role is None:
+            raise ValidationError({"role_id": "الدور غير موجود في هذه المزرعة"})
+
+        try:
+            validate_password(data["password"])
+        except DjangoValidationError as exc:
+            raise ValidationError({"password": list(exc.messages)})
+
+        party = None
+        if data.get("party_id"):
+            party = Party.objects.filter(farm=farm, id=data["party_id"]).first()
+            if party is None:
+                raise ValidationError({"party_id": "الشخص غير موجود في هذه المزرعة"})
+            if party.user_id:
+                raise ValidationError({"party_id": "هذا الشخص مرتبط بحساب دخول آخر"})
+
+        with transaction.atomic():
+            user = User.objects.create_user(
+                username=data["username"],
+                password=data["password"],
+                full_name=data.get("full_name") or data["username"],
+                phone=data.get("phone", ""),
+                email=data.get("email", ""),
+            )
+            user.last_farm = farm
+            user.save(update_fields=["last_farm"])
+            membership = Membership.objects.create(user=user, farm=farm, role=role)
+            if party is not None:
+                party.user = user
+                party.save(update_fields=["user", "updated_at"])
+
+        record(
+            AuditAction.CREATE,
+            "membership",
+            membership.id,
+            farm=farm,
+            label=f"إنشاء حساب دخول {user.username} بدور {role.name_ar or role.name}",
+            new={
+                "username": user.username,
+                "full_name": user.full_name,
+                "role": role.code,
+                "party": party.name if party else "",
+            },
+        )
+        return Response(MembershipSerializer(membership).data, status=201)
+
+    def perform_destroy(self, instance):
+        if instance.user_id == self.request.user.id:
+            raise ValidationError({"detail": "لا يمكنك حذف عضويتك أنت"})
+        super().perform_destroy(instance)
+
+    def perform_update(self, serializer):
+        if (
+            serializer.instance.user_id == self.request.user.id
+            and serializer.validated_data.get("is_active") is False
+        ):
+            raise ValidationError({"detail": "لا يمكنك تعطيل حسابك أنت"})
+        return super().perform_update(serializer)
+
+    @action(detail=True, methods=["post"], url_path="set-password")
+    def set_password(self, request, pk=None):
+        """Reset someone's password. The new one is never stored in the log."""
+        membership = self.get_object()
+        payload = PasswordResetSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        try:
+            validate_password(payload.validated_data["password"], user=membership.user)
+        except DjangoValidationError as exc:
+            raise ValidationError({"password": list(exc.messages)})
+
+        membership.user.set_password(payload.validated_data["password"])
+        membership.user.save(update_fields=["password"])
+        record(
+            AuditAction.UPDATE,
+            "user",
+            membership.user_id,
+            farm=self.farm,
+            label=f"تغيير كلمة مرور {membership.user.username}",
+        )
+        return ok({"username": membership.user.username})
+
+    @action(detail=True, methods=["post"], url_path="link-party")
+    def link_party(self, request, pk=None):
+        """Tie a login to the person's financial record, or untie it."""
+        membership = self.get_object()
+        party_id = request.data.get("party")
+        Party.objects.filter(farm=self.farm, user=membership.user).update(user=None)
+        if party_id:
+            party = Party.objects.filter(farm=self.farm, id=party_id).first()
+            if party is None:
+                raise ValidationError({"party": "الشخص غير موجود في هذه المزرعة"})
+            if party.user_id and party.user_id != membership.user_id:
+                raise ValidationError({"party": "هذا الشخص مرتبط بحساب دخول آخر"})
+            party.user = membership.user
+            party.save(update_fields=["user", "updated_at"])
+        record(
+            AuditAction.UPDATE,
+            "membership",
+            membership.id,
+            farm=self.farm,
+            label=f"ربط {membership.user.username} بسجل شخص",
+            new={"party": str(party_id or "")},
+        )
+        return ok(MembershipSerializer(membership).data)
 
 
 class PermissionListView(APIView):

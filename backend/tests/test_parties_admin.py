@@ -44,11 +44,14 @@ class PartyAdminTests(TestCase):
 
         partner.refresh_from_db()
         self.assertEqual(partner.ownership_percentage, Decimal("55.0000"))
+
         # The old share is not overwritten silently; it stays in the record.
-        history = OwnershipChange.objects.filter(party=partner).order_by("-created_at")
+        # Selected by content, not by created_at: the Windows clock ticks every
+        # ~15ms, so two rows written in the same tick sort arbitrarily.
+        history = OwnershipChange.objects.filter(party=partner)
         self.assertEqual(history.count(), 2)
-        self.assertEqual(history.first().old_percentage, Decimal("60.0000"))
-        self.assertEqual(history.first().new_percentage, Decimal("55.0000"))
+        change = history.get(new_percentage=Decimal("55.0000"))
+        self.assertEqual(change.old_percentage, Decimal("60.0000"))
 
     def test_a_party_who_is_owed_money_cannot_be_deleted(self):
         worker = create_party(self.farm, kind=PartyKind.WORKER, name="خالد")

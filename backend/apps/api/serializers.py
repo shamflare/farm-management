@@ -75,19 +75,49 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class MembershipSerializer(serializers.ModelSerializer):
+    """A person's access to one farm, with the party record they are paid as."""
+
     user = UserSerializer(read_only=True)
     role = RoleSerializer(read_only=True)
-    user_id = serializers.PrimaryKeyRelatedField(
-        source="user", queryset=User.objects.all(), write_only=True
-    )
     role_id = serializers.PrimaryKeyRelatedField(
-        source="role", queryset=Role.objects.all(), write_only=True
+        source="role", queryset=Role.objects.all(), write_only=True, required=False
     )
+    party = serializers.SerializerMethodField()
 
     class Meta:
         model = Membership
-        fields = ["id", "user", "role", "user_id", "role_id", "is_active"]
-        read_only_fields = ["id"]
+        fields = ["id", "user", "role", "role_id", "is_active", "party"]
+        read_only_fields = ["id", "user"]
+
+    def get_party(self, obj):
+        party = obj.user.parties.filter(farm=obj.farm).first()
+        if party is None:
+            return None
+        return {"id": str(party.id), "name": party.name, "kind": party.kind}
+
+
+class MemberCreateSerializer(serializers.Serializer):
+    """Give a person a way in: a login, a role, and optionally their file."""
+
+    username = serializers.CharField(max_length=64)
+    password = serializers.CharField(min_length=8, write_only=True)
+    full_name = serializers.CharField(max_length=160, required=False, allow_blank=True, default="")
+    phone = serializers.CharField(max_length=32, required=False, allow_blank=True, default="")
+    email = serializers.EmailField(required=False, allow_blank=True, default="")
+    role_id = serializers.UUIDField()
+    # The supplier/worker/partner record this login belongs to, so money and
+    # identity are the same person rather than two lookalike rows.
+    party_id = serializers.UUIDField(required=False, allow_null=True)
+
+    def validate_username(self, value):
+        value = value.strip()
+        if User.objects.filter(username__iexact=value).exists():
+            raise serializers.ValidationError("اسم المستخدم محجوز، اختر غيره")
+        return value
+
+
+class PasswordResetSerializer(serializers.Serializer):
+    password = serializers.CharField(min_length=8, write_only=True)
 
 
 class CatalogTypeSerializer(serializers.ModelSerializer):
@@ -183,12 +213,15 @@ class ApprovalRuleSerializer(serializers.ModelSerializer):
 
 class PartySerializer(serializers.ModelSerializer):
     summary = serializers.SerializerMethodField()
+    # The login this person signs in with, when they have one.
+    user_name = serializers.CharField(source="user.full_name", read_only=True, default="")
+    username = serializers.CharField(source="user.username", read_only=True, default="")
 
     class Meta:
         model = Party
         fields = [
             "id", "kind", "name", "phone", "alt_phone", "address", "national_id",
-            "notes", "is_active", "user", "ownership_percentage",
+            "notes", "is_active", "user", "user_name", "username", "ownership_percentage",
             "receivable_account", "payable_account", "capital_account",
             "drawings_account", "cash_account", "summary",
         ]

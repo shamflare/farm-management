@@ -33,11 +33,12 @@ export const useApp = () => useContext(AppContext);
 const NAV = [
   { href: "/dashboard", label: "الرئيسية", icon: "🏠", permission: "dashboard.view" },
   { href: "/animals", label: "الحيوانات", icon: "🐑", permission: "animals.view" },
-  { href: "/finance", label: "المالية", icon: "💰", permission: "finance.view" },
+  { href: "/finance", label: "المالية", icon: "💰", permission: "finance.view|finance.create" },
   { href: "/parties", label: "الأشخاص والحسابات", icon: "👥", permission: "parties.view" },
   { href: "/reports", label: "التقارير", icon: "📊", permission: "reports.view" },
   { href: "/settings/lists", label: "القوائم والبنود", icon: "🗂️", permission: "settings.view" },
   { href: "/settings/fields", label: "بناء النماذج", icon: "🧩", permission: "settings.view" },
+  { href: "/settings/users", label: "المستخدمون والدخول", icon: "🔑", permission: "users.view" },
   { href: "/settings/theme", label: "الهوية البصرية", icon: "🎨", permission: "theme.view" },
   { href: "/audit", label: "سجل التدقيق", icon: "🕓", permission: "audit.view" },
 ];
@@ -64,6 +65,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   const can = (code: string) => !!me?.permissions?.includes(code);
+  // "a|b" means either permission opens the screen.
+  const canAny = (codes: string) => codes.split("|").some((code) => can(code));
 
   if (error) {
     return (
@@ -79,7 +82,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   if (!me) return <div className="empty">جارٍ التحميل…</div>;
 
   const brand = me.theme?.brand ?? FALLBACK_TOKENS.brand;
-  const visibleNav = NAV.filter((item) => !item.permission || can(item.permission));
+  const visibleNav = NAV.filter((item) => !item.permission || canAny(item.permission));
 
   return (
     <AppContext.Provider

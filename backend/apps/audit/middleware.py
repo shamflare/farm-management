@@ -1,4 +1,4 @@
-from apps.core.context import set_current_user, set_request_meta
+from apps.core.context import set_current_request, set_current_user, set_request_meta
 
 
 class AuditContextMiddleware:
@@ -8,7 +8,10 @@ class AuditContextMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        set_current_user(getattr(request, "user", None))
+        # Publish the request itself, not request.user: DRF resolves the JWT
+        # inside the view, so the user only exists later in the cycle.
+        set_current_request(request)
+        set_current_user(None)
         set_request_meta(
             {
                 "ip": self._client_ip(request),
@@ -20,6 +23,7 @@ class AuditContextMiddleware:
         try:
             return self.get_response(request)
         finally:
+            set_current_request(None)
             set_current_user(None)
             set_request_meta({})
 

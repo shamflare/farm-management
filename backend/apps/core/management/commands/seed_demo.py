@@ -55,15 +55,18 @@ class Command(BaseCommand):
 
         # --- people -------------------------------------------------------
         owner = self._user("owner", "أبو محمد - المالك", farm, "owner")
-        self._user("worker", "خالد - المشرف", farm, "worker")
+        worker_user = self._user("worker", "خالد - المشرف", farm, "worker")
         self._user("accountant", "سامر - المحاسب", farm, "accountant")
+        partner_user = self._user("partner", "أبو أحمد - شريك", farm, "partner")
 
-        partner_a = create_party(farm, kind=PartyKind.PARTNER, name="أبو محمد")
-        partner_b = create_party(farm, kind=PartyKind.PARTNER, name="أبو أحمد")
+        # Each person is one identity: the party that holds the money and the
+        # login that signs in are linked, so the audit trail reads as one name.
+        partner_a = create_party(farm, kind=PartyKind.PARTNER, name="أبو محمد", user=owner)
+        partner_b = create_party(farm, kind=PartyKind.PARTNER, name="أبو أحمد", user=partner_user)
         set_ownership(partner_a, 60, effective_from=TODAY - timedelta(days=365))
         set_ownership(partner_b, 40, effective_from=TODAY - timedelta(days=365))
 
-        worker = create_party(farm, kind=PartyKind.WORKER, name="خالد المشرف")
+        worker = create_party(farm, kind=PartyKind.WORKER, name="خالد المشرف", user=worker_user)
         supplier = create_party(farm, kind=PartyKind.SUPPLIER, name="معمل الأعلاف")
         customer = create_party(farm, kind=PartyKind.CUSTOMER, name="تاجر السوق")
 
@@ -328,4 +331,4 @@ class Command(BaseCommand):
             f"dead {animals.filter(status__code='dead').count()}"
         )
         out.write("")
-        out.write(self.style.SUCCESS("demo ready. users: owner / worker / accountant  (password: farm1234)"))
+        out.write(self.style.SUCCESS("demo ready. users: owner / worker / accountant / partner  (password: farm1234)"))

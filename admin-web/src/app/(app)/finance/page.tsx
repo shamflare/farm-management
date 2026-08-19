@@ -57,6 +57,7 @@ export default function FinancePage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
+  const canReadBooks = can("finance.view");
   const cashAccounts = useMemo(() => accounts.filter((a) => a.is_cash), [accounts]);
   const expenseCategories = useMemo(
     () => catalog.filter((c) => c.type === "expense_category"),
@@ -75,23 +76,30 @@ export default function FinancePage() {
   }
 
   useEffect(() => {
-    Promise.all([
-      api.get<Page<Account>>("/accounts/?page_size=200"),
-      api.get<Page<Catalog>>("/catalog/?page_size=200"),
-      api.get<Page<Party>>("/parties/?page_size=200"),
-    ])
-      .then(([a, c, p]) => {
-        setAccounts(a.results);
+    // A worker may record money without being allowed to read the books, so
+    // the pickers fall back to endpoints that carry names but no balances.
+    const accountsCall = canReadBooks
+      ? api.get<Page<Account>>("/accounts/?page_size=200").then((d) => d.results)
+      : api.get<{ data: Account[] }>("/accounts/pickable/").then((d) => d.data);
+    const partiesCall = canReadBooks
+      ? api.get<Page<Party>>("/parties/?page_size=200").then((d) => d.results)
+      : api.get<{ data: Party[] }>("/parties/pickable/").then((d) => d.data);
+
+    Promise.all([accountsCall, api.get<Page<Catalog>>("/catalog/?page_size=200"), partiesCall])
+      .then(([accountRows, c, partyRows]) => {
+        setAccounts(accountRows);
         setCatalog(c.results);
-        setParties(p.results);
+        setParties(partyRows);
       })
       .catch((err) => setError(err.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
+    if (!canReadBooks) return;
     loadEntries().catch((err) => setError(err.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind]);
+  }, [kind, canReadBooks]);
 
   async function act(entryId: string, action: string) {
     const reason = action === "reverse" ? window.prompt("سبب عكس القيد؟") ?? "" : "";
@@ -109,7 +117,11 @@ export default function FinancePage() {
       <div className="page-head">
         <div>
           <h1 className="page-title">المالية</h1>
-          <p className="page-sub">كل عملية هنا قيد مزدوج متوازن، ولا يمكن حذفها — تُعكس فقط</p>
+          <p className="page-sub">
+            {canReadBooks
+              ? "كل عملية هنا قيد مزدوج متوازن، ولا يمكن حذفها — تُعكس فقط"
+              : "سجّل ما صرفته؛ دفتر القيود والأرصدة يطّلع عليها من يملك صلاحية المالية"}
+          </p>
         </div>
       </div>
 
@@ -167,6 +179,14 @@ export default function FinancePage() {
         </div>
       )}
 
+      {!canReadBooks && (
+        <p className="page-sub">
+          العمليات التي تسجّلها تُحفظ باسمك في سجل التدقيق، ويراجعها صاحب المزرعة.
+        </p>
+      )}
+
+      {canReadBooks && (
+      <>
       <div className="page-head" style={{ marginBottom: 12 }}>
         <h2 style={{ fontSize: "1.15rem", fontWeight: 700 }}>دفتر القيود</h2>
         <select value={kind} onChange={(e) => setKind(e.target.value)} style={{ padding: 8, borderRadius: "var(--radius)", border: "1px solid var(--color-border)" }}>
@@ -250,6 +270,8 @@ export default function FinancePage() {
           </tbody>
         </table>
       </div>
+      </>
+      )}
     </>
   );
 }
