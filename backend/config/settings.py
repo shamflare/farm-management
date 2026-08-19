@@ -148,6 +148,12 @@ SPECTACULAR_SETTINGS = {
 CORS_ALLOW_ALL_ORIGINS = DEBUG
 CORS_ALLOWED_ORIGINS = [o for o in os.getenv("CORS_ORIGINS", "").split(",") if o]
 
+# Clients name their farm in a custom header, which browsers only send once the
+# preflight response lists it explicitly.
+from corsheaders.defaults import default_headers  # noqa: E402
+
+CORS_ALLOW_HEADERS = (*default_headers, "x-farm", "x-idempotency-key")
+
 # Money precision used across every monetary column.
 MONEY_MAX_DIGITS = 20
 MONEY_DECIMAL_PLACES = 4

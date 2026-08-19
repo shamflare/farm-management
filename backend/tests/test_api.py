@@ -50,6 +50,21 @@ class AuthTests(ApiTestCase):
         self.assertIn("primary", body["theme"]["colors"])
 
 
+class CorsTests(ApiTestCase):
+    """The browser refuses to send X-Farm unless the preflight advertises it."""
+
+    def test_preflight_allows_the_farm_header(self):
+        response = APIClient().options(
+            "/api/v1/auth/me/",
+            HTTP_ORIGIN="http://localhost:3000",
+            HTTP_ACCESS_CONTROL_REQUEST_METHOD="GET",
+            HTTP_ACCESS_CONTROL_REQUEST_HEADERS="authorization,x-farm",
+        )
+        allowed = response.headers.get("access-control-allow-headers", "")
+        self.assertIn("x-farm", allowed.lower())
+        self.assertIn("authorization", allowed.lower())
+
+
 class PermissionTests(ApiTestCase):
     def test_worker_can_add_an_animal(self):
         response = self.client_for(self.worker).post(
