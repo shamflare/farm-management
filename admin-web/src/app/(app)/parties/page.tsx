@@ -15,7 +15,17 @@ type Summary = {
   net_capital: number;
   ownership_percentage: number | null;
 };
-type Party = { id: string; name: string; kind: string; phone: string; is_active: boolean; summary: Summary };
+type Party = {
+  id: string;
+  name: string;
+  kind: string;
+  phone: string;
+  address: string;
+  notes: string;
+  is_active: boolean;
+  ownership_percentage: string | null;
+  summary: Summary;
+};
 type Account = { id: string; display_name: string; is_cash: boolean };
 type Page<T> = { count: number; results: T[] };
 
@@ -29,11 +39,19 @@ const KIND_LABEL: Record<string, string> = {
 
 const KINDS = ["", "partner", "worker", "supplier", "customer"];
 
+/** A person with any open balance must not be hidden from the list. */
+function hasOpenBalance(summary: Summary) {
+  return Boolean(
+    summary.owed_to_farm || summary.owed_by_farm || summary.net_capital || summary.drawings
+  );
+}
+
 export default function PartiesPage() {
   const { can, currency } = useApp();
   const [rows, setRows] = useState<Party[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [kind, setKind] = useState("");
+  const [editing, setEditing] = useState<Party | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [statement, setStatement] = useState<any>(null);
   const [error, setError] = useState("");
@@ -56,6 +74,50 @@ export default function PartiesPage() {
     load().catch((err) => setError(err.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kind]);
+
+  function startEdit(party: Party) {
+    setEditing(party);
+    setShowForm(true);
+    setError("");
+    setNotice("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function startCreate() {
+    setEditing(null);
+    setShowForm((v) => !v);
+  }
+
+  async function toggleActive(party: Party) {
+    try {
+      await api.patch(`/parties/${party.id}/`, { is_active: !party.is_active });
+      setNotice(
+        party.is_active
+          ? `تم تعطيل «${party.name}» — يختفي من القوائم الجديدة وتبقى حركاته في الدفتر`
+          : `تم تفعيل «${party.name}»`
+      );
+      load();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  }
+
+  async function remove(party: Party) {
+    if (hasOpenBalance(party.summary)) {
+      setError(
+        `لا يمكن حذف «${party.name}» لوجود رصيد مفتوح. سدّد الرصيد أولًا، أو عطّل الحساب بدل حذفه.`
+      );
+      return;
+    }
+    if (!window.confirm(`حذف «${party.name}»؟ حركاته السابقة تبقى في الدفتر ولن تُمس.`)) return;
+    try {
+      await api.delete(`/parties/${party.id}/`);
+      setNotice(`تم حذف «${party.name}» — سجل الدفتر لم يتغير`);
+      load();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  }
 
   async function moneyAction(party: Party, operation: "settle" | "collect" | "capital" | "withdraw") {
     const amount = window.prompt(labelFor(operation, party.name));
@@ -96,8 +158,8 @@ export default function PartiesPage() {
           <p className="page-sub">لكل شخص حساب حقيقي في الدفتر — الأرصدة محسوبة من القيود</p>
         </div>
         {can("parties.create") && (
-          <button className="btn" onClick={() => setShowForm((v) => !v)}>
-            {showForm ? "إغلاق" : "+ إضافة شخص"}
+          <button className="btn" onClick={startCreate}>
+            {showForm && !editing ? "إغلاق" : "+ إضافة شخص"}
           </button>
         )}
       </div>
@@ -107,8 +169,15 @@ export default function PartiesPage() {
 
       {showForm && (
         <PartyForm
-          onDone={() => {
+          initial={editing}
+          onCancel={() => {
             setShowForm(false);
+            setEditing(null);
+          }}
+          onDone={(message) => {
+            setShowForm(false);
+            setEditing(null);
+            setNotice(message);
             load();
           }}
           onError={setError}
@@ -134,16 +203,23 @@ export default function PartiesPage() {
               <th>له علينا</th>
               <th>رأس المال</th>
               <th>النسبة</th>
-              <th></th>
+              <th>الحركات المالية</th>
+              <th>إدارة السجل</th>
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 && <tr><td colSpan={8} className="empty">لا توجد سجلات</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={9} className="empty">لا توجد سجلات</td></tr>}
             {rows.map((party) => {
               const s = party.summary;
+              const locked = hasOpenBalance(s);
               return (
-                <tr key={party.id}>
-                  <td style={{ fontWeight: 600 }}>{party.name}</td>
+                <tr key={party.id} style={party.is_active ? undefined : { opacity: 0.55 }}>
+                  <td style={{ fontWeight: 600 }}>
+                    {party.name}
+                    {!party.is_active && (
+                      <span className="badge badge-muted" style={{ marginInlineStart: 8 }}>معطّل</span>
+                    )}
+                  </td>
                   <td><span className="badge">{KIND_LABEL[party.kind]}</span></td>
                   <td className="muted">{party.phone || "—"}</td>
                   <td className="num">{s.owed_to_farm ? money(s.owed_to_farm, currency) : "—"}</td>
@@ -152,6 +228,7 @@ export default function PartiesPage() {
                   </td>
                   <td className="num">{s.net_capital ? money(s.net_capital, currency) : "—"}</td>
                   <td className="num">{s.ownership_percentage != null ? `${s.ownership_percentage}%` : "—"}</td>
+
                   <td style={{ whiteSpace: "nowrap" }}>
                     <button className="btn btn-sm btn-ghost" onClick={() => openStatement(party)}>كشف حساب</button>{" "}
                     {s.owed_by_farm > 0 && can("workers.settle") && (
@@ -167,12 +244,38 @@ export default function PartiesPage() {
                       </>
                     )}
                   </td>
+
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    {can("parties.edit") && (
+                      <>
+                        <button className="btn btn-sm btn-ghost" onClick={() => startEdit(party)}>تعديل</button>{" "}
+                        <button className="btn btn-sm btn-ghost" onClick={() => toggleActive(party)}>
+                          {party.is_active ? "تعطيل" : "تفعيل"}
+                        </button>{" "}
+                      </>
+                    )}
+                    {can("parties.delete") && (
+                      <button
+                        className="btn btn-sm btn-danger"
+                        onClick={() => remove(party)}
+                        disabled={locked}
+                        title={locked ? "لا يمكن الحذف: يوجد رصيد مفتوح" : "حذف السجل"}
+                      >
+                        حذف
+                      </button>
+                    )}
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+
+      <p className="page-sub" style={{ marginTop: 12 }}>
+        الحذف لا يمس الدفتر: القيود وكشوف الحسابات تبقى كما هي. ومن عليه أو له رصيد لا يُحذف حتى
+        يُسدَّد — عطّله بدل ذلك ليختفي من القوائم الجديدة.
+      </p>
 
       {statement && (
         <div className="card" style={{ marginTop: 20 }}>
@@ -225,19 +328,59 @@ function labelFor(operation: string, name: string) {
   return `كم سحب ${name}؟`;
 }
 
-function PartyForm({ onDone, onError }: { onDone: () => void; onError: (m: string) => void }) {
-  const [form, setForm] = useState({ kind: "supplier", name: "", phone: "", ownership_percentage: "" });
+function PartyForm({
+  initial,
+  onDone,
+  onCancel,
+  onError,
+}: {
+  initial: Party | null;
+  onDone: (message: string) => void;
+  onCancel: () => void;
+  onError: (message: string) => void;
+}) {
+  const [form, setForm] = useState({
+    kind: "supplier",
+    name: "",
+    phone: "",
+    address: "",
+    notes: "",
+    ownership_percentage: "",
+  });
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (initial) {
+      setForm({
+        kind: initial.kind,
+        name: initial.name,
+        phone: initial.phone ?? "",
+        address: initial.address ?? "",
+        notes: initial.notes ?? "",
+        ownership_percentage:
+          initial.ownership_percentage != null ? String(Number(initial.ownership_percentage)) : "",
+      });
+    } else {
+      setForm({ kind: "supplier", name: "", phone: "", address: "", notes: "", ownership_percentage: "" });
+    }
+  }, [initial]);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
+    const body = {
+      ...form,
+      ownership_percentage:
+        form.kind === "partner" && form.ownership_percentage ? form.ownership_percentage : null,
+    };
     try {
-      await api.post("/parties/", {
-        ...form,
-        ownership_percentage: form.kind === "partner" && form.ownership_percentage ? form.ownership_percentage : null,
-      });
-      onDone();
+      if (initial) {
+        await api.patch(`/parties/${initial.id}/`, body);
+        onDone(`تم تعديل «${form.name}»`);
+      } else {
+        await api.post("/parties/", body);
+        onDone(`تمت إضافة «${form.name}» مع حساباته في الدفتر`);
+      }
     } catch (err: any) {
       onError(err.message);
     } finally {
@@ -247,11 +390,19 @@ function PartyForm({ onDone, onError }: { onDone: () => void; onError: (m: strin
 
   return (
     <form className="card" style={{ marginBottom: 16 }} onSubmit={submit}>
-      <div className="card-title">شخص جديد</div>
+      <div className="card-title">
+        <span>{initial ? `تعديل: ${initial.name}` : "شخص جديد"}</span>
+        <button type="button" className="btn btn-sm btn-ghost" onClick={onCancel}>إلغاء</button>
+      </div>
       <div className="row">
         <div className="field">
           <label>الصفة</label>
-          <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
+          <select
+            value={form.kind}
+            onChange={(e) => setForm({ ...form, kind: e.target.value })}
+            disabled={Boolean(initial)}
+            title={initial ? "لا تُغيّر صفة شخص له حسابات في الدفتر" : undefined}
+          >
             {Object.entries(KIND_LABEL).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
             ))}
@@ -264,6 +415,10 @@ function PartyForm({ onDone, onError }: { onDone: () => void; onError: (m: strin
         <div className="field">
           <label>الهاتف</label>
           <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+        </div>
+        <div className="field">
+          <label>العنوان</label>
+          <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
         </div>
         {form.kind === "partner" && (
           <div className="field">
@@ -278,8 +433,19 @@ function PartyForm({ onDone, onError }: { onDone: () => void; onError: (m: strin
             />
           </div>
         )}
+        <div className="field" style={{ flex: "2 1 240px" }}>
+          <label>ملاحظات</label>
+          <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+        </div>
       </div>
-      <button className="btn" disabled={busy}>{busy ? "جارٍ الحفظ…" : "حفظ"}</button>
+      <button className="btn" disabled={busy}>
+        {busy ? "جارٍ الحفظ…" : initial ? "حفظ التعديل" : "حفظ"}
+      </button>
+      {initial && form.kind === "partner" && (
+        <span className="stat-hint" style={{ marginInlineStart: 12 }}>
+          تغيير النسبة يُسجَّل في تاريخ الشراكة ولا يُمحى.
+        </span>
+      )}
     </form>
   );
 }

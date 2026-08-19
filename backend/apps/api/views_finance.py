@@ -34,8 +34,13 @@ from apps.ledger import services as ledger_services
 from apps.ledger.models import Account, ApprovalRule, EntryStatus, JournalEntry
 from apps.operations import services as ops
 from apps.operations.models import AnimalPurchase, AnimalSale
-from apps.parties.models import Party
-from apps.parties.services import ensure_party_accounts, party_statement, party_summary
+from apps.parties.models import Party, PartyKind
+from apps.parties.services import (
+    ensure_party_accounts,
+    party_statement,
+    party_summary,
+    set_ownership,
+)
 
 
 def pick(model, farm, value, label):
@@ -223,6 +228,57 @@ class PartyViewSet(FarmScopedViewSet):
         party = super().perform_create(serializer)
         ensure_party_accounts(party)
         return party
+
+    def perform_update(self, serializer):
+        """Ownership changes go through the service so history is recorded."""
+        instance = serializer.instance
+        old_share = instance.ownership_percentage
+        new_share = serializer.validated_data.get("ownership_percentage", old_share)
+        changes_share = (
+            instance.kind == PartyKind.PARTNER and new_share is not None and new_share != old_share
+        )
+        if changes_share:
+            serializer.validated_data.pop("ownership_percentage", None)
+
+        party = super().perform_update(serializer)
+        ensure_party_accounts(party)
+
+        if changes_share:
+            set_ownership(
+                party,
+                new_share,
+                effective_from=date.today(),
+                reason="تعديل من لوحة الإدارة",
+            )
+        return party
+
+    def perform_destroy(self, instance):
+        """Refuse to hide a person who still owes money or is owed money.
+
+        Deleting is a soft delete, so the ledger survives either way - but a
+        settled-looking list that quietly drops a 2,200 debt is worse than an
+        error message. Deactivating is the safe alternative and stays available.
+        """
+        outstanding = []
+        for slot, label in (
+            ("receivable_account", "ذمم مدينة"),
+            ("payable_account", "ذمم دائنة"),
+            ("capital_account", "رأس مال"),
+            ("drawings_account", "مسحوبات"),
+            ("cash_account", "عهدة نقدية"),
+        ):
+            account = getattr(instance, slot, None)
+            if account is not None and account.balance() != 0:
+                outstanding.append(f"{label}: {account.balance()}")
+        if outstanding:
+            raise ValidationError(
+                {
+                    "detail": "لا يمكن حذف هذا الشخص لوجود أرصدة مفتوحة ("
+                    + " · ".join(outstanding)
+                    + "). سدّد الرصيد أولًا أو عطّل الحساب بدل حذفه."
+                }
+            )
+        super().perform_destroy(instance)
 
     @action(detail=True, methods=["get"])
     def statement(self, request, pk=None):
