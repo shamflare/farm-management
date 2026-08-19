@@ -1,0 +1,505 @@
+"""API serializers.
+
+Read serializers include the Arabic display name so the mobile app never has to
+guess a label. Write serializers accept ids and validate against the farm.
+"""
+from decimal import Decimal
+
+from rest_framework import serializers
+
+from apps.accounts.models import Membership, Permission, Role, User
+from apps.animals.models import (
+    Animal,
+    AnimalEvent,
+    Birth,
+    HealthRecord,
+    WeightRecord,
+)
+from apps.audit.models import AuditLog
+from apps.catalog.models import CatalogItem, CatalogType
+from apps.core.models import Currency, Farm
+from apps.customfields.models import FieldDefinition, FieldValue
+from apps.ledger.models import Account, ApprovalRule, JournalEntry, LedgerLine
+from apps.operations.models import AnimalPurchase, AnimalSale, PurchaseItem, SaleItem
+from apps.parties.models import Party
+from apps.theme.models import Theme
+
+
+class CurrencySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Currency
+        fields = ["code", "name", "symbol", "decimal_places", "is_active"]
+
+
+class FarmSerializer(serializers.ModelSerializer):
+    base_currency = CurrencySerializer(read_only=True)
+
+    class Meta:
+        model = Farm
+        fields = [
+            "id", "name", "slug", "base_currency", "timezone", "country",
+            "is_active", "opening_completed_at",
+        ]
+        read_only_fields = ["id", "opening_completed_at"]
+
+
+class PermissionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Permission
+        fields = ["code", "module", "action", "label", "label_ar", "is_sensitive"]
+
+
+class RoleSerializer(serializers.ModelSerializer):
+    permissions = serializers.SlugRelatedField(
+        slug_field="code", queryset=Permission.objects.all(), many=True, required=False
+    )
+    display_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Role
+        fields = [
+            "id", "code", "name", "name_ar", "display_name", "description",
+            "is_system", "permissions",
+        ]
+        read_only_fields = ["id", "is_system"]
+
+    def get_display_name(self, obj):
+        return obj.name_ar or obj.name
+
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ["id", "username", "full_name", "email", "phone", "language", "is_active"]
+        read_only_fields = ["id"]
+
+
+class MembershipSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+    role = RoleSerializer(read_only=True)
+    user_id = serializers.PrimaryKeyRelatedField(
+        source="user", queryset=User.objects.all(), write_only=True
+    )
+    role_id = serializers.PrimaryKeyRelatedField(
+        source="role", queryset=Role.objects.all(), write_only=True
+    )
+
+    class Meta:
+        model = Membership
+        fields = ["id", "user", "role", "user_id", "role_id", "is_active"]
+        read_only_fields = ["id"]
+
+
+class CatalogTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CatalogType
+        fields = ["code", "name", "name_ar", "allows_children", "description"]
+
+
+class CatalogItemSerializer(serializers.ModelSerializer):
+    display_name = serializers.CharField(read_only=True)
+    type = serializers.PrimaryKeyRelatedField(queryset=CatalogType.objects.all())
+    children_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CatalogItem
+        fields = [
+            "id", "type", "parent", "code", "name", "name_ar", "display_name",
+            "color", "icon", "sort_order", "is_active", "is_system",
+            "metadata", "children_count",
+        ]
+        read_only_fields = ["id", "is_system"]
+
+    def get_children_count(self, obj):
+        return obj.children.count()
+
+
+class FieldDefinitionSerializer(serializers.ModelSerializer):
+    display_label = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = FieldDefinition
+        fields = [
+            "id", "entity", "key", "label", "label_ar", "display_label", "help_text",
+            "field_type", "is_builtin", "is_required", "is_visible", "is_active",
+            "show_in_list", "sort_order", "group", "default_value", "options", "validation",
+        ]
+        read_only_fields = ["id", "is_builtin"]
+
+
+class AccountSerializer(serializers.ModelSerializer):
+    display_name = serializers.CharField(read_only=True)
+    balance = serializers.SerializerMethodField()
+    currency = serializers.PrimaryKeyRelatedField(queryset=Currency.objects.all())
+
+    class Meta:
+        model = Account
+        fields = [
+            "id", "code", "name", "name_ar", "display_name", "type", "currency",
+            "parent", "is_cash", "is_system", "is_active", "catalog_item",
+            "description", "sort_order", "balance",
+        ]
+        read_only_fields = ["id", "is_system"]
+
+    def get_balance(self, obj):
+        return obj.balance()
+
+
+class LedgerLineSerializer(serializers.ModelSerializer):
+    account_code = serializers.CharField(source="account.code", read_only=True)
+    account_name = serializers.CharField(source="account.display_name", read_only=True)
+    account_type = serializers.CharField(source="account.type", read_only=True)
+
+    class Meta:
+        model = LedgerLine
+        fields = [
+            "id", "account", "account_code", "account_name", "account_type",
+            "debit", "credit", "memo", "subject_type", "subject_id",
+        ]
+
+
+class JournalEntrySerializer(serializers.ModelSerializer):
+    lines = LedgerLineSerializer(many=True, read_only=True)
+    currency_code = serializers.CharField(source="currency.code", read_only=True)
+    created_by_name = serializers.CharField(source="created_by.full_name", read_only=True)
+
+    class Meta:
+        model = JournalEntry
+        fields = [
+            "id", "number", "date", "kind", "status", "currency", "currency_code",
+            "amount", "memo", "reference", "subject_type", "subject_id",
+            "reverses", "void_reason", "posted_at", "approved_at",
+            "created_at", "created_by_name", "attachments", "lines",
+        ]
+        read_only_fields = fields
+
+
+class ApprovalRuleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ApprovalRule
+        fields = ["id", "kind", "min_amount", "currency", "is_active", "note"]
+        read_only_fields = ["id"]
+
+
+class PartySerializer(serializers.ModelSerializer):
+    summary = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Party
+        fields = [
+            "id", "kind", "name", "phone", "alt_phone", "address", "national_id",
+            "notes", "is_active", "user", "ownership_percentage",
+            "receivable_account", "payable_account", "capital_account",
+            "drawings_account", "cash_account", "summary",
+        ]
+        read_only_fields = [
+            "id", "receivable_account", "payable_account", "capital_account",
+            "drawings_account", "cash_account",
+        ]
+
+    def get_summary(self, obj):
+        if self.context.get("with_summary") is False:
+            return None
+        from apps.parties.services import party_summary
+
+        return party_summary(obj)
+
+
+class AnimalListSerializer(serializers.ModelSerializer):
+    type_name = serializers.CharField(source="animal_type.display_name", read_only=True)
+    breed_name = serializers.CharField(source="breed.display_name", read_only=True, default="")
+    status_name = serializers.CharField(source="status.display_name", read_only=True)
+    status_code = serializers.CharField(source="status.code", read_only=True)
+    location_name = serializers.CharField(source="location.display_name", read_only=True, default="")
+
+    class Meta:
+        model = Animal
+        fields = [
+            "id", "tag", "name", "animal_type", "type_name", "breed", "breed_name",
+            "sex", "birth_date", "status", "status_name", "status_code",
+            "location", "location_name", "current_weight", "is_alive", "is_on_farm",
+            "photo", "mother", "father",
+        ]
+
+
+class AnimalSerializer(serializers.ModelSerializer):
+    type_name = serializers.CharField(source="animal_type.display_name", read_only=True)
+    breed_name = serializers.CharField(source="breed.display_name", read_only=True, default="")
+    status_name = serializers.CharField(source="status.display_name", read_only=True)
+    mother_tag = serializers.CharField(source="mother.tag", read_only=True, default="")
+    father_tag = serializers.CharField(source="father.tag", read_only=True, default="")
+    custom_fields = serializers.DictField(required=False)
+
+    class Meta:
+        model = Animal
+        fields = [
+            "id", "tag", "name", "animal_type", "type_name", "breed", "breed_name",
+            "status", "status_name", "location", "sex", "birth_date",
+            "mother", "mother_tag", "father", "father_tag", "acquisition",
+            "entered_at", "exited_at", "purchase_price", "purchase_currency",
+            "ear_tag", "chip_number", "barcode", "color", "current_weight",
+            "photo", "notes", "is_alive", "is_on_farm", "custom_fields",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = [
+            "id", "purchase_price", "purchase_currency", "is_alive", "is_on_farm",
+            "exited_at", "created_at", "updated_at",
+        ]
+
+
+class AnimalEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AnimalEvent
+        fields = [
+            "id", "event_type", "happened_on", "title", "detail", "amount",
+            "currency", "journal_entry", "data", "created_at",
+        ]
+
+
+class WeightRecordSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WeightRecord
+        fields = ["id", "animal", "measured_on", "weight_kg", "note"]
+        read_only_fields = ["id"]
+
+
+class HealthRecordSerializer(serializers.ModelSerializer):
+    item_name = serializers.CharField(source="item.display_name", read_only=True, default="")
+
+    class Meta:
+        model = HealthRecord
+        fields = [
+            "id", "animal", "kind", "item", "item_name", "happened_on", "next_due_on",
+            "dose", "veterinarian", "cost", "currency", "journal_entry", "notes",
+        ]
+        read_only_fields = ["id", "journal_entry"]
+
+
+class BirthSerializer(serializers.ModelSerializer):
+    mother_tag = serializers.CharField(source="mother.tag", read_only=True)
+    offspring_tags = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Birth
+        fields = [
+            "id", "mother", "mother_tag", "father", "happened_on", "total_born",
+            "born_alive", "stillborn", "notes", "offspring_tags",
+        ]
+        read_only_fields = ["id", "total_born", "born_alive"]
+
+    def get_offspring_tags(self, obj):
+        return [row.animal.tag for row in obj.offspring.select_related("animal")]
+
+
+class PurchaseItemSerializer(serializers.ModelSerializer):
+    animal_tag = serializers.CharField(source="animal.tag", read_only=True)
+
+    class Meta:
+        model = PurchaseItem
+        fields = ["id", "animal", "animal_tag", "unit_price", "allocated_cost"]
+
+
+class AnimalPurchaseSerializer(serializers.ModelSerializer):
+    items = PurchaseItemSerializer(many=True, read_only=True)
+    supplier_name = serializers.CharField(source="supplier.name", read_only=True, default="")
+    remaining = serializers.DecimalField(max_digits=20, decimal_places=4, read_only=True)
+
+    class Meta:
+        model = AnimalPurchase
+        fields = [
+            "id", "reference", "supplier", "supplier_name", "happened_on", "currency",
+            "animals_price", "transport_cost", "commission_cost", "other_cost",
+            "total_cost", "paid_amount", "remaining", "settlement_status",
+            "paid_from_account", "paid_by_party", "journal_entry", "notes",
+            "attachments", "items",
+        ]
+        read_only_fields = fields
+
+
+class SaleItemSerializer(serializers.ModelSerializer):
+    animal_tag = serializers.CharField(source="animal.tag", read_only=True)
+
+    class Meta:
+        model = SaleItem
+        fields = ["id", "animal", "animal_tag", "unit_price", "weight_kg", "book_value"]
+
+
+class AnimalSaleSerializer(serializers.ModelSerializer):
+    items = SaleItemSerializer(many=True, read_only=True)
+    customer_name = serializers.CharField(source="customer.name", read_only=True, default="")
+    remaining = serializers.DecimalField(max_digits=20, decimal_places=4, read_only=True)
+
+    class Meta:
+        model = AnimalSale
+        fields = [
+            "id", "reference", "customer", "customer_name", "happened_on", "currency",
+            "animals_price", "transport_cost", "commission_cost", "total_price",
+            "received_amount", "remaining", "settlement_status",
+            "received_into_account", "sale_reason", "journal_entry", "notes",
+            "attachments", "items",
+        ]
+        read_only_fields = fields
+
+
+class AuditLogSerializer(serializers.ModelSerializer):
+    user_name = serializers.CharField(source="user.full_name", read_only=True, default="")
+
+    class Meta:
+        model = AuditLog
+        fields = [
+            "id", "action", "entity", "object_id", "label", "old_values", "new_values",
+            "user", "user_name", "ip_address", "created_at",
+        ]
+
+
+class ThemeSerializer(serializers.ModelSerializer):
+    tokens = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Theme
+        fields = [
+            "id", "status", "version", "brand_name", "brand_tagline", "logo",
+            "logo_dark", "favicon", "colors", "font_family", "font_scale",
+            "corner_radius", "density", "dark_mode_enabled", "sidebar",
+            "dashboard_widgets", "published_at", "tokens",
+        ]
+        read_only_fields = ["id", "status", "version", "published_at"]
+
+    def get_tokens(self, obj):
+        return obj.token_payload()
+
+
+# --- command payloads -------------------------------------------------------
+
+
+class ExpenseCommandSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    amount = serializers.DecimalField(max_digits=20, decimal_places=4, min_value=Decimal("0"))
+    category = serializers.UUIDField(required=False, allow_null=True)
+    expense_account = serializers.UUIDField(required=False, allow_null=True)
+    from_account = serializers.UUIDField(required=False, allow_null=True)
+    paid_by_party = serializers.UUIDField(required=False, allow_null=True)
+    supplier = serializers.UUIDField(required=False, allow_null=True)
+    animal = serializers.UUIDField(required=False, allow_null=True)
+    memo = serializers.CharField(required=False, allow_blank=True, default="")
+    reference = serializers.CharField(required=False, allow_blank=True, default="")
+    currency = serializers.CharField(required=False, allow_blank=True)
+    attachments = serializers.ListField(required=False)
+    idempotency_key = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate(self, data):
+        if not data.get("from_account") and not data.get("paid_by_party") and not data.get("supplier"):
+            raise serializers.ValidationError(
+                "choose who paid: a farm account, a person paying from their pocket, or a supplier on credit"
+            )
+        return data
+
+
+class IncomeCommandSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    amount = serializers.DecimalField(max_digits=20, decimal_places=4, min_value=Decimal("0"))
+    category = serializers.UUIDField(required=False, allow_null=True)
+    income_account = serializers.UUIDField(required=False, allow_null=True)
+    into_account = serializers.UUIDField(required=False, allow_null=True)
+    customer = serializers.UUIDField(required=False, allow_null=True)
+    memo = serializers.CharField(required=False, allow_blank=True, default="")
+    reference = serializers.CharField(required=False, allow_blank=True, default="")
+    currency = serializers.CharField(required=False, allow_blank=True)
+    idempotency_key = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class TransferCommandSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    amount = serializers.DecimalField(max_digits=20, decimal_places=4, min_value=Decimal("0"))
+    from_account = serializers.UUIDField()
+    to_account = serializers.UUIDField()
+    memo = serializers.CharField(required=False, allow_blank=True, default="")
+    idempotency_key = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class PartyMoneyCommandSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    amount = serializers.DecimalField(max_digits=20, decimal_places=4, min_value=Decimal("0"))
+    party = serializers.UUIDField()
+    account = serializers.UUIDField()
+    memo = serializers.CharField(required=False, allow_blank=True, default="")
+    idempotency_key = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class PurchaseLineSerializer(serializers.Serializer):
+    animal = serializers.UUIDField(required=False, allow_null=True)
+    unit_price = serializers.DecimalField(max_digits=20, decimal_places=4, min_value=Decimal("0"))
+    # When no animal id is given, one is created from these fields.
+    tag = serializers.CharField(required=False, allow_blank=True)
+    name = serializers.CharField(required=False, allow_blank=True)
+    animal_type = serializers.UUIDField(required=False, allow_null=True)
+    breed = serializers.UUIDField(required=False, allow_null=True)
+    sex = serializers.CharField(required=False, allow_blank=True)
+    birth_date = serializers.DateField(required=False, allow_null=True)
+
+
+class PurchaseCommandSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    items = PurchaseLineSerializer(many=True)
+    supplier = serializers.UUIDField(required=False, allow_null=True)
+    transport_cost = serializers.DecimalField(max_digits=20, decimal_places=4, default=0)
+    commission_cost = serializers.DecimalField(max_digits=20, decimal_places=4, default=0)
+    other_cost = serializers.DecimalField(max_digits=20, decimal_places=4, default=0)
+    paid_amount = serializers.DecimalField(
+        max_digits=20, decimal_places=4, required=False, allow_null=True
+    )
+    from_account = serializers.UUIDField(required=False, allow_null=True)
+    paid_by_party = serializers.UUIDField(required=False, allow_null=True)
+    reference = serializers.CharField(required=False, allow_blank=True, default="")
+    notes = serializers.CharField(required=False, allow_blank=True, default="")
+    idempotency_key = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class SaleLineSerializer(serializers.Serializer):
+    animal = serializers.UUIDField()
+    unit_price = serializers.DecimalField(max_digits=20, decimal_places=4, min_value=Decimal("0"))
+    weight_kg = serializers.DecimalField(
+        max_digits=10, decimal_places=3, required=False, allow_null=True
+    )
+
+
+class SaleCommandSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    items = SaleLineSerializer(many=True)
+    customer = serializers.UUIDField(required=False, allow_null=True)
+    transport_cost = serializers.DecimalField(max_digits=20, decimal_places=4, default=0)
+    commission_cost = serializers.DecimalField(max_digits=20, decimal_places=4, default=0)
+    received_amount = serializers.DecimalField(
+        max_digits=20, decimal_places=4, required=False, allow_null=True
+    )
+    into_account = serializers.UUIDField(required=False, allow_null=True)
+    sale_reason = serializers.UUIDField(required=False, allow_null=True)
+    reference = serializers.CharField(required=False, allow_blank=True, default="")
+    notes = serializers.CharField(required=False, allow_blank=True, default="")
+    idempotency_key = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class BirthCommandSerializer(serializers.Serializer):
+    mother = serializers.UUIDField()
+    father = serializers.UUIDField(required=False, allow_null=True)
+    happened_on = serializers.DateField()
+    stillborn = serializers.IntegerField(required=False, default=0, min_value=0)
+    notes = serializers.CharField(required=False, allow_blank=True, default="")
+    offspring = serializers.ListField(child=serializers.DictField(), required=False, default=list)
+
+
+class DeathCommandSerializer(serializers.Serializer):
+    animal = serializers.UUIDField()
+    date = serializers.DateField()
+    reason = serializers.UUIDField(required=False, allow_null=True)
+    notes = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class OpeningBalanceSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    assets = serializers.ListField(child=serializers.DictField(), required=False, default=list)
+    liabilities = serializers.ListField(child=serializers.DictField(), required=False, default=list)
+    partner_capital = serializers.ListField(
+        child=serializers.DictField(), required=False, default=list
+    )
+    memo = serializers.CharField(required=False, allow_blank=True, default="الرصيد الافتتاحي")
