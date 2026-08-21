@@ -33,7 +33,10 @@ export const useApp = () => useContext(AppContext);
 const NAV = [
   { href: "/dashboard", label: "الرئيسية", icon: "🏠", permission: "dashboard.view" },
   { href: "/animals", label: "الحيوانات", icon: "🐑", permission: "animals.view" },
+  { href: "/milk", label: "الحليب", icon: "🥛", permission: "milk.view" },
+  { href: "/inventory", label: "مستودعات الأعلاف", icon: "🌾", permission: "inventory.view" },
   { href: "/finance", label: "المالية", icon: "💰", permission: "finance.view|finance.create" },
+  { href: "/founding-costs", label: "التكاليف التأسيسية", icon: "🏗️", permission: "assets.view" },
   { href: "/parties", label: "الأشخاص والحسابات", icon: "👥", permission: "parties.view" },
   { href: "/reports", label: "التقارير", icon: "📊", permission: "reports.view" },
   { href: "/settings/lists", label: "القوائم والبنود", icon: "🗂️", permission: "settings.view" },

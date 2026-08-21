@@ -93,6 +93,31 @@ def validate_theme(theme, *, strict=True):
     return problems
 
 
+# A logo lives in the database rather than on disk, so it has to stay small
+# enough to ride along with every theme read. Roughly 400 KB of image once the
+# base64 padding is accounted for.
+MAX_LOGO_CHARS = 550_000
+LOGO_PREFIXES = ("data:image/png", "data:image/jpeg", "data:image/svg+xml", "data:image/webp")
+
+
+def validate_logo_data(value):
+    """Only an inlined image, and only a small one.
+
+    This value is served back to every browser inside the theme payload, so
+    anything else here would be both a broken logo and a place to park content
+    the page would then render.
+    """
+    if not value:
+        return ""
+    if not isinstance(value, str) or not value.startswith(LOGO_PREFIXES):
+        raise ValidationError({"logo_data": "الشعار يجب أن يكون صورة PNG أو JPEG أو SVG أو WebP"})
+    if len(value) > MAX_LOGO_CHARS:
+        raise ValidationError(
+            {"logo_data": "حجم الشعار كبير — استخدم صورة أصغر من 400 كيلوبايت"}
+        )
+    return value
+
+
 def get_draft(farm):
     theme = Theme.objects.filter(farm=farm, status=ThemeStatus.DRAFT).first()
     if theme is not None:
@@ -139,6 +164,7 @@ def save_draft(farm, data, actor=None):
     editable = {
         "brand_name",
         "brand_tagline",
+        "logo_data",
         "colors",
         "font_family",
         "font_scale",
@@ -153,6 +179,8 @@ def save_draft(farm, data, actor=None):
             if key == "colors" and isinstance(value, dict):
                 merged = {**(draft.colors or {}), **value}
                 setattr(draft, key, merged)
+            elif key == "logo_data":
+                setattr(draft, key, validate_logo_data(value))
             else:
                 setattr(draft, key, value)
     draft.save()

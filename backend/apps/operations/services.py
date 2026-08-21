@@ -85,6 +85,7 @@ def record_expense(
     reference="",
     subject_type="",
     subject_id=None,
+    branch=None,
     supplier=None,
     attachments=None,
     idempotency_key="",
@@ -114,7 +115,14 @@ def record_expense(
         kind=EntryKind.EXPENSE,
         currency=currency,
         lines=[
-            Line.dr(debit_account, amount, memo=memo, subject_type=subject_type, subject_id=subject_id),
+            Line.dr(
+                debit_account,
+                amount,
+                memo=memo,
+                subject_type=subject_type,
+                subject_id=subject_id,
+                branch=branch,
+            ),
             Line.cr(credit_account, amount, memo=memo),
         ],
         memo=memo,
@@ -143,6 +151,7 @@ def record_income(
     reference="",
     subject_type="",
     subject_id=None,
+    branch=None,
     attachments=None,
     idempotency_key="",
     actor=None,
@@ -170,7 +179,14 @@ def record_income(
         currency=currency,
         lines=[
             Line.dr(debit_account, amount, memo=memo),
-            Line.cr(credit_account, amount, memo=memo, subject_type=subject_type, subject_id=subject_id),
+            Line.cr(
+                credit_account,
+                amount,
+                memo=memo,
+                subject_type=subject_type,
+                subject_id=subject_id,
+                branch=branch,
+            ),
         ],
         memo=memo,
         reference=reference,
@@ -342,6 +358,59 @@ def collect_from_party(
     )
 
 
+CULLING_REASON = "culling"
+
+
+def _by_branch(animals, amounts):
+    """Fold per-animal amounts into one total per branch, order preserved.
+
+    Revenue and cost have to reach the ledger split by branch, otherwise a
+    single mixed invoice would make both branch reports wrong.
+    """
+    groups = {}
+    for animal, amount in zip(animals, amounts):
+        if amount <= ZERO:
+            continue
+        key = animal.branch_id
+        if key in groups:
+            groups[key][1] += amount
+        else:
+            groups[key] = [animal.branch, amount]
+    return list(groups.values())
+
+
+def revenue_account_for(farm, animal, sale_reason=None):
+    """Which revenue line a sold animal belongs on.
+
+    The breeding branch earns from two different things and the owner reads
+    them apart: lambs raised and sold, and ewes taken out of the flock. An ewe
+    born here and culled years later is a cull, not a lamb sale, so the reason
+    is asked first.
+    """
+    from apps.animals.models import Acquisition
+
+    if sale_reason is not None and sale_reason.code == CULLING_REASON:
+        return chart.get(farm, chart.CULLED_SALES)
+    if animal.acquisition == Acquisition.BORN:
+        return chart.get(farm, chart.OFFSPRING_SALES)
+    return chart.get(farm, chart.ANIMAL_SALES)
+
+
+def _by_account_and_branch(animals, amounts, account_for):
+    """Same folding as `_by_branch`, but split by revenue account too."""
+    groups = {}
+    for animal, amount in zip(animals, amounts):
+        if amount <= ZERO:
+            continue
+        account = account_for(animal)
+        key = (account.id, animal.branch_id)
+        if key in groups:
+            groups[key][2] += amount
+        else:
+            groups[key] = [account, animal.branch, amount]
+    return list(groups.values())
+
+
 def _allocate(total_extra, weights):
     """Spread transport and fees over animals in proportion to their price.
 
@@ -386,7 +455,7 @@ def purchase_animals(
     Transport, commission and other fees are capitalised into the value of the
     animals, so each animal carries its true cost.
     """
-    from apps.animals.models import AnimalEvent, AnimalEventType
+    from apps.animals.models import Acquisition, AnimalEvent, AnimalEventType
 
     if not items:
         raise ValidationError("a purchase needs at least one animal")
@@ -411,7 +480,13 @@ def purchase_animals(
     unpaid = total_cost - paid
 
     livestock = chart.get(farm, chart.LIVESTOCK)
-    lines = [Line.dr(livestock, total_cost, memo=notes or "animal purchase")]
+    allocations = _allocate(extra, prices)
+    animals = [item["animal"] for item in items]
+    allocated_costs = [price + share for price, share in zip(prices, allocations)]
+    lines = [
+        Line.dr(livestock, amount, memo=notes or "animal purchase", branch=branch)
+        for branch, amount in _by_branch(animals, allocated_costs)
+    ]
 
     if paid > ZERO:
         source = resolve_payment_source(
@@ -464,17 +539,27 @@ def purchase_animals(
     purchase.journal_entry = entry
     purchase.save(update_fields=["journal_entry", "updated_at"])
 
-    allocations = _allocate(extra, prices)
-    for item, price, share in zip(items, prices, allocations):
+    for item, price, allocated in zip(items, prices, allocated_costs):
         animal = item["animal"]
-        allocated = price + share
         PurchaseItem.objects.create(
             purchase=purchase, animal=animal, unit_price=price, allocated_cost=allocated
         )
         animal.purchase_price = allocated
         animal.purchase_currency = currency
         animal.entered_at = animal.entered_at or date
-        animal.save(update_fields=["purchase_price", "purchase_currency", "entered_at", "updated_at"])
+        # Money changed hands for this animal, so however it was registered, it
+        # is a purchased animal now. Reports read this to tell a lamb raised
+        # here apart from one bought at the market.
+        animal.acquisition = Acquisition.PURCHASED
+        animal.save(
+            update_fields=[
+                "purchase_price",
+                "purchase_currency",
+                "entered_at",
+                "acquisition",
+                "updated_at",
+            ]
+        )
         AnimalEvent.objects.create(
             farm=farm,
             animal=animal,
@@ -552,11 +637,16 @@ def sell_animals(
     if outstanding > ZERO and customer is None:
         raise ValidationError("an unpaid balance needs a customer to owe it")
 
-    revenue = chart.get(farm, chart.ANIMAL_SALES)
     livestock = chart.get(farm, chart.LIVESTOCK)
     cogs = chart.get(farm, chart.COST_OF_ANIMALS_SOLD)
 
-    lines = [Line.cr(revenue, animals_price, memo=notes or "animal sale")]
+    animals = [item["animal"] for item in items]
+    lines = [
+        Line.cr(account, amount, memo=notes or "animal sale", branch=branch)
+        for account, branch, amount in _by_account_and_branch(
+            animals, prices, lambda animal: revenue_account_for(farm, animal, sale_reason)
+        )
+    ]
     if received > ZERO:
         lines.append(Line.dr(into_account, received, memo=notes or "animal sale"))
     if outstanding > ZERO:
@@ -572,14 +662,20 @@ def sell_animals(
         book_values.append(book_value)
         total_book_value += book_value
     if total_book_value > ZERO:
-        lines.append(Line.dr(cogs, total_book_value, memo="cost of animals sold"))
-        lines.append(Line.cr(livestock, total_book_value, memo="cost of animals sold"))
+        for branch, amount in _by_branch(animals, book_values):
+            lines.append(Line.dr(cogs, amount, memo="cost of animals sold", branch=branch))
+            lines.append(Line.cr(livestock, amount, memo="cost of animals sold", branch=branch))
 
     if selling_costs > ZERO:
         if into_account is None:
             raise ValidationError("selling costs need an account to be paid from")
         selling_expense = chart.get(farm, chart.OTHER_EXPENSE)
-        lines.append(Line.dr(selling_expense, selling_costs, memo="transport and commission"))
+        # Transport and commission follow the animals that caused them.
+        shares = _allocate(selling_costs, prices)
+        for branch, amount in _by_branch(animals, shares):
+            lines.append(
+                Line.dr(selling_expense, amount, memo="transport and commission", branch=branch)
+            )
         lines.append(Line.cr(into_account, selling_costs, memo="transport and commission"))
 
     sale = AnimalSale.objects.create(
@@ -679,8 +775,14 @@ def record_animal_death(
                     memo=notes or "animal death",
                     subject_type="animal",
                     subject_id=animal.id,
+                    branch=animal.branch,
                 ),
-                Line.cr(chart.get(farm, chart.LIVESTOCK), book_value, memo=notes or "animal death"),
+                Line.cr(
+                    chart.get(farm, chart.LIVESTOCK),
+                    book_value,
+                    memo=notes or "animal death",
+                    branch=animal.branch,
+                ),
             ],
             memo=notes or f"death of animal {animal.tag}",
             subject_type="animal",

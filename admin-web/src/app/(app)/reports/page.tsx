@@ -5,6 +5,7 @@ import { api, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 
 const TABS = [
+  { key: "branches", label: "مقارنة الفروع" },
   { key: "trial", label: "ميزان المراجعة" },
   { key: "pl", label: "الأرباح والخسائر" },
   { key: "cash", label: "التدفق النقدي" },
@@ -20,13 +21,14 @@ const PERIODS = [
 
 export default function ReportsPage() {
   const { currency } = useApp();
-  const [tab, setTab] = useState("trial");
+  const [tab, setTab] = useState("branches");
   const [period, setPeriod] = useState("all");
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     const paths: Record<string, string> = {
+      branches: `/reports/branches/?period=${period}`,
       trial: "/reports/trial-balance/",
       pl: `/reports/profit-loss/?period=${period}`,
       cash: `/reports/cash-flow/?period=${period}`,
@@ -65,6 +67,76 @@ export default function ReportsPage() {
 
       {error && <div className="alert alert-error">{error}</div>}
       {!data && <div className="empty">جارٍ التحميل…</div>}
+
+      {data && tab === "branches" && (
+        <>
+          <div className="grid grid-2" style={{ marginBottom: 16 }}>
+            {data.branches.map((column: any) => (
+              <div className="card" key={column.code}>
+                <div className="card-title">{column.name}</div>
+                <div className={`stat-value num ${Number(column.net_profit) >= 0 ? "positive" : "negative"}`}>
+                  {money(column.net_profit, currency)}
+                </div>
+                <div className="stat-hint" style={{ marginBottom: 12 }}>
+                  صافي الربح للفترة
+                </div>
+                <table>
+                  <tbody>
+                    <tr>
+                      <td>الدخل</td>
+                      <td className="num positive" style={{ textAlign: "left", fontWeight: 600 }}>
+                        {money(column.total_income, currency)}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>المصروفات</td>
+                      <td className="num negative" style={{ textAlign: "left", fontWeight: 600 }}>
+                        {money(column.total_expenses, currency)}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>عدد الحيوانات</td>
+                      <td className="num" style={{ textAlign: "left" }}>{column.animals_on_farm}</td>
+                    </tr>
+                    <tr>
+                      <td>قيمة العلف في المستودع</td>
+                      <td className="num" style={{ textAlign: "left" }}>{money(column.stock_value, currency)}</td>
+                    </tr>
+                    {column.milk && Number(column.milk.liters_produced) > 0 && (
+                      <tr>
+                        <td>الحليب المنتج</td>
+                        <td className="num" style={{ textAlign: "left" }}>
+                          {Number(column.milk.liters_produced).toLocaleString("en-US")} لتر
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+
+                <div className="card-title" style={{ marginTop: 16 }}>بنود الدخل</div>
+                <SimpleTable rows={column.income} currency={currency} />
+                <div className="card-title" style={{ marginTop: 16 }}>بنود المصروف</div>
+                <SimpleTable rows={column.expenses} currency={currency} />
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-3">
+            <div className="card">
+              <div className="stat-label">دخل المزرعة كاملة</div>
+              <div className="stat-value num positive">{money(data.farm_total.total_income, currency)}</div>
+            </div>
+            <div className="card">
+              <div className="stat-label">مصروفات المزرعة كاملة</div>
+              <div className="stat-value num negative">{money(data.farm_total.total_expenses, currency)}</div>
+            </div>
+            <div className="card">
+              <div className="stat-label">التكاليف التأسيسية (خارج الأرباح)</div>
+              <div className="stat-value num">{money(data.founding_total, currency)}</div>
+            </div>
+          </div>
+        </>
+      )}
 
       {data && tab === "trial" && (
         <>

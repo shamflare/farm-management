@@ -76,9 +76,23 @@ class CatalogItem(FarmScopedModel):
         return super().delete(using=using, keep_parents=keep_parents, hard=hard)
 
 
+class BranchCode:
+    """The branches seeded for a new farm.
+
+    A branch is an ordinary catalog row: the farm can rename these, or add a
+    third one from the settings screen, without a migration. Only the seed and
+    the first-run defaults reference these codes.
+    """
+
+    BREEDING = "breeding"
+    FATTENING = "fattening"
+    SHARED = "shared"
+
+
 class CatalogTypeCode:
     """Codes referenced by application logic."""
 
+    BRANCH = "branch"
     ANIMAL_TYPE = "animal_type"
     BREED = "breed"
     ANIMAL_STATUS = "animal_status"
@@ -94,3 +108,4 @@ class CatalogTypeCode:
     DEATH_REASON = "death_reason"
     SALE_REASON = "sale_reason"
     DOCUMENT_TYPE = "document_type"
+    MILK_PRODUCT = "milk_product"

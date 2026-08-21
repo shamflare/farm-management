@@ -3,16 +3,21 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from django.db.models import Count, Sum
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.animals.models import Animal, Birth
 from apps.api.permissions import FarmPermission, resolve_farm
+from apps.assets import services as founding_services
+from apps.catalog.models import CatalogItem, CatalogTypeCode
+from apps.inventory import services as stock_services
 from apps.ledger import chart
 from apps.ledger import services as ledger_services
 from apps.ledger.models import AccountType, EntryStatus, LedgerLine
 from apps.parties.models import Party, PartyKind
 from apps.parties.services import party_summary
+from apps.production import services as milk_services
 
 ZERO = Decimal("0")
 
@@ -34,6 +39,31 @@ def period_from_query(params):
     if preset == "all":
         return None, None
     return today.replace(day=1).isoformat(), today.isoformat()
+
+
+def _looks_like_uuid(value):
+    return len(value) == 36 and value.count("-") == 4
+
+
+def branch_from_query(farm, params):
+    """Resolve `?branch=`: a branch row, the unassigned marker, or nothing.
+
+    An id that does not belong to this farm is an error, not an invitation to
+    quietly report the whole farm instead.
+    """
+    raw = params.get("branch") or None
+    if raw is None:
+        return None
+    if raw == ledger_services.UNASSIGNED:
+        return ledger_services.UNASSIGNED
+    branch = (
+        CatalogItem.objects.filter(farm=farm, type_id=CatalogTypeCode.BRANCH, id=raw).first()
+        if _looks_like_uuid(raw)
+        else None
+    )
+    if branch is None:
+        raise ValidationError({"branch": f"branch '{raw}' was not found in this farm"})
+    return branch
 
 
 class ReportView(APIView):
@@ -89,6 +119,27 @@ class DashboardView(ReportView):
             for party in Party.objects.filter(farm=farm, kind=PartyKind.PARTNER, is_active=True)
         ]
 
+        # One card per branch, so the first thing the owner sees is which of
+        # the two made money this period.
+        comparison = ledger_services.branch_comparison(farm, date_from=date_from, date_to=date_to)
+        head = {
+            str(row["branch"]): row["count"]
+            for row in on_farm.values("branch").annotate(count=Count("id"))
+        }
+        branch_cards = [
+            {
+                "branch_id": column["branch_id"],
+                "code": column["code"],
+                "name": column["name"],
+                "income": column["total_income"],
+                "expenses": column["total_expenses"],
+                "net_profit": column["net_profit"],
+                "animals_on_farm": head.get(column["branch_id"] or "None", 0),
+            }
+            for column in comparison["branches"]
+        ]
+        milk_summary = milk_services.summary(farm, date_from=date_from, date_to=date_to)
+
         return Response(
             {
                 "period": {"from": date_from, "to": date_to},
@@ -120,6 +171,17 @@ class DashboardView(ReportView):
                     "owed_by_farm": payable,
                     "due_to_workers": worker_due,
                 },
+                "branches": branch_cards,
+                "milk": {
+                    "liters_produced": milk_summary["liters_produced"],
+                    "liters_sold": milk_summary["liters_sold"],
+                    "daily_average": milk_summary["daily_average"],
+                    "sales_value": milk_summary["sales_value"],
+                },
+                "founding_total": founding_services.summary(farm)["total"],
+                "stock_value": sum(
+                    (row["total_value"] for row in stock_services.farm_balances(farm)), ZERO
+                ),
                 "partners": partners,
                 "pending_approvals": ledger_services.open_entries_pending_approval(farm).count(),
             }
@@ -155,8 +217,13 @@ class TrialBalanceView(ReportView):
 
 class ProfitLossView(ReportView):
     def get(self, request):
+        farm = self.farm
         date_from, date_to = period_from_query(request.query_params)
-        result = ledger_services.profit_and_loss(self.farm, date_from=date_from, date_to=date_to)
+        # `branch=none` asks for the amounts no branch carries.
+        branch = branch_from_query(farm, request.query_params)
+        result = ledger_services.profit_and_loss(
+            farm, date_from=date_from, date_to=date_to, branch=branch
+        )
         result["period"] = {"from": date_from, "to": date_to}
         return Response(result)
 
@@ -317,6 +384,138 @@ class AnimalReportView(ReportView):
                         "offspring": row["offspring"] or 0,
                     }
                     for row in top_mothers
+                ],
+            }
+        )
+
+
+class BranchReportView(ReportView):
+    """Breeding beside fattening: the report the whole split exists for.
+
+    Each column is a full profit and loss for one branch, plus the physical
+    facts that explain it - how many head, how much feed is still in its
+    store, how much milk it drew.
+    """
+
+    def get(self, request):
+        farm = self.farm
+        date_from, date_to = period_from_query(request.query_params)
+        comparison = ledger_services.branch_comparison(farm, date_from=date_from, date_to=date_to)
+
+        head = {
+            str(row["branch"]): row["count"]
+            for row in Animal.objects.filter(farm=farm, is_on_farm=True)
+            .values("branch")
+            .annotate(count=Count("id"))
+        }
+        stock_value = {}
+        for row in stock_services.farm_balances(farm):
+            key = str(row["store"].branch_id)
+            stock_value[key] = stock_value.get(key, ZERO) + row["total_value"]
+
+        for column in comparison["branches"]:
+            branch_id = column["branch_id"] or "None"
+            column["animals_on_farm"] = head.get(branch_id, 0)
+            column["stock_value"] = stock_value.get(branch_id, ZERO)
+            column["milk"] = (
+                milk_services.summary(
+                    farm,
+                    date_from=date_from,
+                    date_to=date_to,
+                    branch=column["branch_id"],
+                )
+                if column["branch_id"]
+                else None
+            )
+
+        comparison["period"] = {"from": date_from, "to": date_to}
+        comparison["founding_total"] = founding_services.summary(farm)["total"]
+        return Response(comparison)
+
+
+class MilkReportView(ReportView):
+    """Litres drawn, litres sold, and what became of the difference."""
+
+    required_permissions = {"default": "milk.view"}
+
+    def get(self, request):
+        farm = self.farm
+        date_from, date_to = period_from_query(request.query_params)
+        branch = branch_from_query(farm, request.query_params)
+        if branch is ledger_services.UNASSIGNED:
+            branch = None
+        return Response(
+            {
+                "period": {"from": date_from, "to": date_to},
+                **milk_services.summary(farm, date_from=date_from, date_to=date_to, branch=branch),
+                "daily": milk_services.daily_series(
+                    farm, date_from=date_from, date_to=date_to, branch=branch
+                ),
+            }
+        )
+
+
+class FoundingCostReportView(ReportView):
+    """What the farm cost to set up, all of it, from day one."""
+
+    required_permissions = {"default": "assets.view"}
+
+    def get(self, request):
+        farm = self.farm
+        # Founding costs are cumulative by nature: the default is everything
+        # ever spent, not this month's slice.
+        date_from = request.query_params.get("from") or None
+        date_to = request.query_params.get("to") or None
+        return Response(
+            {
+                "period": {"from": date_from, "to": date_to},
+                **founding_services.summary(farm, date_from=date_from, date_to=date_to),
+                "book_value": chart.get(farm, chart.FIXED_ASSETS).balance(),
+            }
+        )
+
+
+class StockReportView(ReportView):
+    """Every store, what is in it, what it is worth, what is running out."""
+
+    required_permissions = {"default": "inventory.view"}
+
+    def get(self, request):
+        farm = self.farm
+        as_of = request.query_params.get("as_of") or None
+        rows = stock_services.farm_balances(farm, as_of=as_of)
+        return Response(
+            {
+                "as_of": as_of,
+                "total_value": sum((row["total_value"] for row in rows), ZERO),
+                "stores": [
+                    {
+                        "store_id": str(row["store"].id),
+                        "name": row["store"].display_name,
+                        "branch": row["store"].branch.display_name if row["store"].branch else "",
+                        "total_value": row["total_value"],
+                        "items": [
+                            {
+                                "item_id": str(item["item"].id),
+                                "name": item["item"].display_name,
+                                "unit": item["item"].unit_name,
+                                "quantity": item["quantity"],
+                                "value": item["value"],
+                                "average_cost": item["average_cost"],
+                            }
+                            for item in row["items"]
+                        ],
+                    }
+                    for row in rows
+                ],
+                "low_stock": [
+                    {
+                        "store": warning["store"].display_name,
+                        "item": warning["item"].display_name,
+                        "quantity": warning["quantity"],
+                        "reorder_level": warning["item"].reorder_level,
+                    }
+                    for warning in stock_services.low_stock(farm)
                 ],
             }
         )

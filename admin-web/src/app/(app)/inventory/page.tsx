@@ -1,0 +1,611 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { api, formatDate, formatNumber, money } from "@/lib/api";
+import { useApp } from "@/components/AppShell";
+
+type Store = {
+  id: string;
+  display_name: string;
+  branch: string | null;
+  branch_name: string;
+  branch_code: string;
+  account_code: string;
+  is_active: boolean;
+};
+type Item = {
+  id: string;
+  display_name: string;
+  unit: string | null;
+  unit_name: string;
+  category: string | null;
+  reorder_level: string;
+};
+type BalanceItem = {
+  item_id: string;
+  name: string;
+  unit: string;
+  quantity: string;
+  value: string;
+  average_cost: string;
+  reorder_level: string;
+  is_low: boolean;
+};
+type StoreBalance = { store: Store; total_value: string; items: BalanceItem[] };
+type Movement = {
+  id: string;
+  store_name: string;
+  branch_name: string;
+  item_name: string;
+  unit_name: string;
+  kind: string;
+  happened_on: string;
+  quantity: string;
+  unit_cost: string;
+  total_cost: string;
+  supplier_name: string;
+  memo: string;
+};
+type Page<T> = { count: number; results: T[] };
+type Account = { id: string; display_name: string; is_cash: boolean; type: string };
+type Party = { id: string; name: string; kind: string };
+
+const KIND_LABEL: Record<string, string> = {
+  receipt: "استلام",
+  issue: "صرف للحيوانات",
+  transfer_in: "وارد تحويل",
+  transfer_out: "صادر تحويل",
+  waste: "هدر",
+  count: "جرد",
+};
+
+const FORMS = [
+  { key: "receive", label: "استلام علف" },
+  { key: "issue", label: "صرف للحيوانات" },
+  { key: "transfer", label: "تحويل بين المستودعين" },
+  { key: "count", label: "جرد" },
+];
+
+const today = () => new Date().toISOString().slice(0, 10);
+
+export default function InventoryPage() {
+  const { can, currency } = useApp();
+  const [balances, setBalances] = useState<StoreBalance[]>([]);
+  const [totalValue, setTotalValue] = useState("0");
+  const [stores, setStores] = useState<Store[]>([]);
+  const [items, setItems] = useState<Item[]>([]);
+  const [movements, setMovements] = useState<Movement[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [parties, setParties] = useState<Party[]>([]);
+  const [storeFilter, setStoreFilter] = useState("");
+  const [openForm, setOpenForm] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  async function loadAll() {
+    setLoading(true);
+    try {
+      const [balance, storeRows, itemRows] = await Promise.all([
+        api.get<{ data: { stores: StoreBalance[]; total_value: string } }>("/stock-balance/"),
+        api.get<Page<Store>>("/stores/?page_size=100"),
+        api.get<Page<Item>>("/inventory-items/?page_size=200"),
+      ]);
+      setBalances(balance.data.stores);
+      setTotalValue(balance.data.total_value);
+      setStores(storeRows.results);
+      setItems(itemRows.results);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadMovements() {
+    const params = new URLSearchParams({ page_size: "40", ordering: "-happened_on" });
+    if (storeFilter) params.set("store", storeFilter);
+    const data = await api.get<Page<Movement>>(`/stock-movements/?${params}`);
+    setMovements(data.results);
+  }
+
+  useEffect(() => {
+    loadAll();
+    api
+      .get<{ data: Account[] }>("/accounts/pickable/")
+      .then((res) => setAccounts(res.data.filter((a) => a.is_cash)))
+      .catch(() => {});
+    api
+      .get<Page<Party>>("/parties/?page_size=200")
+      .then((res) => setParties(res.results))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadMovements().catch((err) => setError(err.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storeFilter]);
+
+  function refresh() {
+    setOpenForm("");
+    loadAll();
+    loadMovements().catch(() => {});
+  }
+
+  const lowStock = useMemo(
+    () => balances.flatMap((s) => s.items.filter((i) => i.is_low).map((i) => ({ ...i, store: s.store.display_name }))),
+    [balances]
+  );
+
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <h1 className="page-title">مستودعات الأعلاف</h1>
+          <p className="page-sub">
+            مستودع لكل فرع · العلف أصل حتى يُصرف، وعندها يصير تكلفة على فرعه
+          </p>
+        </div>
+        <div style={{ textAlign: "left" }}>
+          <div className="stat-label">قيمة المخزون</div>
+          <div className="stat-value num">{money(totalValue, currency)}</div>
+        </div>
+      </div>
+
+      {error && <div className="alert alert-error">{error}</div>}
+
+      {can("inventory.create") && (
+        <div className="tabs">
+          {FORMS.map((form) => (
+            <button
+              key={form.key}
+              className={`tab ${openForm === form.key ? "active" : ""}`}
+              onClick={() => setOpenForm(openForm === form.key ? "" : form.key)}
+            >
+              {form.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {openForm === "receive" && (
+        <ReceiveForm
+          stores={stores}
+          items={items}
+          accounts={accounts}
+          suppliers={parties.filter((p) => p.kind === "supplier" || p.kind === "other")}
+          onDone={refresh}
+        />
+      )}
+      {openForm === "issue" && <IssueForm stores={stores} items={items} onDone={refresh} />}
+      {openForm === "transfer" && <TransferForm stores={stores} items={items} onDone={refresh} />}
+      {openForm === "count" && <CountForm stores={stores} items={items} onDone={refresh} />}
+
+      {lowStock.length > 0 && (
+        <div className="alert alert-error">
+          أوشك على النفاد:{" "}
+          {lowStock.map((row) => `${row.name} في ${row.store} (${formatNumber(row.quantity, 2)} ${row.unit})`).join(" · ")}
+        </div>
+      )}
+
+      {loading && <div className="empty">جارٍ التحميل…</div>}
+
+      <div className="grid grid-2">
+        {balances.map((row) => (
+          <div className="card" key={row.store.id}>
+            <div className="card-title">
+              {row.store.display_name}
+              {row.store.branch_name && <span className="badge" style={{ marginRight: 8 }}>{row.store.branch_name}</span>}
+            </div>
+            <div className="stat-value num" style={{ marginBottom: 12 }}>{money(row.total_value, currency)}</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>الصنف</th>
+                  <th>الكمية</th>
+                  <th>متوسط التكلفة</th>
+                  <th>القيمة</th>
+                </tr>
+              </thead>
+              <tbody>
+                {row.items.map((item) => (
+                  <tr key={item.item_id}>
+                    <td>
+                      {item.name}
+                      {item.is_low && <span className="badge badge-warning" style={{ marginRight: 6 }}>منخفض</span>}
+                    </td>
+                    <td className="num">
+                      {formatNumber(item.quantity, 2)} {item.unit}
+                    </td>
+                    <td className="num muted">{money(item.average_cost, currency)}</td>
+                    <td className="num" style={{ fontWeight: 600 }}>{money(item.value, currency)}</td>
+                  </tr>
+                ))}
+                {row.items.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="empty">المستودع فارغ</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </div>
+
+      <div className="page-head" style={{ marginTop: 24 }}>
+        <h2 className="page-title" style={{ fontSize: 18 }}>حركات المستودع</h2>
+        <div className="field" style={{ margin: 0, minWidth: 200 }}>
+          <select value={storeFilter} onChange={(e) => setStoreFilter(e.target.value)}>
+            <option value="">كل المستودعات</option>
+            {stores.map((store) => (
+              <option key={store.id} value={store.id}>{store.display_name}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>التاريخ</th>
+              <th>الحركة</th>
+              <th>المستودع</th>
+              <th>الفرع</th>
+              <th>الصنف</th>
+              <th>الكمية</th>
+              <th>سعر الوحدة</th>
+              <th>القيمة</th>
+              <th>البيان</th>
+            </tr>
+          </thead>
+          <tbody>
+            {movements.map((row) => (
+              <tr key={row.id}>
+                <td>{formatDate(row.happened_on)}</td>
+                <td>
+                  <span className={`badge ${row.kind === "issue" ? "" : "badge-muted"}`}>
+                    {KIND_LABEL[row.kind] ?? row.kind}
+                  </span>
+                </td>
+                <td>{row.store_name}</td>
+                <td className="muted">{row.branch_name || "—"}</td>
+                <td>{row.item_name}</td>
+                <td className="num">
+                  {formatNumber(row.quantity, 2)} {row.unit_name}
+                </td>
+                <td className="num muted">{money(row.unit_cost, currency)}</td>
+                <td className="num">{money(row.total_cost, currency)}</td>
+                <td className="muted">{row.memo || row.supplier_name || "—"}</td>
+              </tr>
+            ))}
+            {movements.length === 0 && (
+              <tr>
+                <td colSpan={9} className="empty">لا توجد حركات</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function useSubmit(path: string, onDone: () => void) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function submit(body: any) {
+    setBusy(true);
+    setError("");
+    try {
+      await api.post(path, body);
+      onDone();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return { busy, error, submit };
+}
+
+function ReceiveForm({
+  stores,
+  items,
+  accounts,
+  suppliers,
+  onDone,
+}: {
+  stores: Store[];
+  items: Item[];
+  accounts: Account[];
+  suppliers: Party[];
+  onDone: () => void;
+}) {
+  const [form, setForm] = useState({
+    store: "",
+    item: "",
+    date: today(),
+    quantity: "",
+    total_cost: "",
+    from_account: "",
+    supplier: "",
+    memo: "",
+  });
+  const { busy, error, submit } = useSubmit("/ops/stock-receive/", onDone);
+
+  useEffect(() => {
+    setForm((prev) => ({
+      ...prev,
+      store: prev.store || stores[0]?.id || "",
+      item: prev.item || items[0]?.id || "",
+      from_account: prev.from_account || accounts[0]?.id || "",
+    }));
+  }, [stores, items, accounts]);
+
+  return (
+    <form
+      className="card"
+      style={{ marginBottom: 16 }}
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit({
+          ...form,
+          supplier: form.supplier || null,
+          from_account: form.supplier ? null : form.from_account || null,
+        });
+      }}
+    >
+      <div className="card-title">استلام علف في المستودع</div>
+      <p className="page-sub" style={{ marginBottom: 12 }}>
+        لا يُسجَّل مصروفًا الآن — يدخل المخزون كأصل، ويصير تكلفة يوم يُصرف.
+      </p>
+      {error && <div className="alert alert-error">{error}</div>}
+      <div className="row">
+        <div className="field">
+          <label>المستودع</label>
+          <select value={form.store} onChange={(e) => setForm({ ...form, store: e.target.value })} required>
+            {stores.map((s) => (
+              <option key={s.id} value={s.id}>{s.display_name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>الصنف</label>
+          <select value={form.item} onChange={(e) => setForm({ ...form, item: e.target.value })} required>
+            {items.map((i) => (
+              <option key={i.id} value={i.id}>{i.display_name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>التاريخ</label>
+          <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required />
+        </div>
+        <div className="field">
+          <label>الكمية</label>
+          <input type="number" step="0.001" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} required />
+        </div>
+        <div className="field">
+          <label>التكلفة الإجمالية</label>
+          <input type="number" step="0.01" value={form.total_cost} onChange={(e) => setForm({ ...form, total_cost: e.target.value })} required />
+        </div>
+        <div className="field">
+          <label>مدفوع من</label>
+          <select value={form.from_account} onChange={(e) => setForm({ ...form, from_account: e.target.value })}>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>{a.display_name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>أو على حساب المورد</label>
+          <select value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })}>
+            <option value="">—</option>
+            {suppliers.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>ملاحظة</label>
+          <input value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
+        </div>
+      </div>
+      <button className="btn" disabled={busy}>{busy ? "جارٍ الحفظ…" : "حفظ الاستلام"}</button>
+    </form>
+  );
+}
+
+function IssueForm({ stores, items, onDone }: { stores: Store[]; items: Item[]; onDone: () => void }) {
+  const [form, setForm] = useState({ store: "", item: "", date: today(), quantity: "", memo: "" });
+  const { busy, error, submit } = useSubmit("/ops/stock-issue/", onDone);
+
+  useEffect(() => {
+    setForm((prev) => ({
+      ...prev,
+      store: prev.store || stores[0]?.id || "",
+      item: prev.item || items[0]?.id || "",
+    }));
+  }, [stores, items]);
+
+  const store = stores.find((s) => s.id === form.store);
+
+  return (
+    <form
+      className="card"
+      style={{ marginBottom: 16 }}
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit(form);
+      }}
+    >
+      <div className="card-title">صرف علف للحيوانات</div>
+      <p className="page-sub" style={{ marginBottom: 12 }}>
+        التكلفة تُحمَّل على فرع {store?.branch_name || "المستودع"} بمتوسط التكلفة المرجح.
+      </p>
+      {error && <div className="alert alert-error">{error}</div>}
+      <div className="row">
+        <div className="field">
+          <label>المستودع</label>
+          <select value={form.store} onChange={(e) => setForm({ ...form, store: e.target.value })} required>
+            {stores.map((s) => (
+              <option key={s.id} value={s.id}>{s.display_name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>الصنف</label>
+          <select value={form.item} onChange={(e) => setForm({ ...form, item: e.target.value })} required>
+            {items.map((i) => (
+              <option key={i.id} value={i.id}>{i.display_name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>التاريخ</label>
+          <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required />
+        </div>
+        <div className="field">
+          <label>الكمية</label>
+          <input type="number" step="0.001" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} required />
+        </div>
+        <div className="field">
+          <label>ملاحظة</label>
+          <input value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
+        </div>
+      </div>
+      <button className="btn" disabled={busy}>{busy ? "جارٍ الحفظ…" : "حفظ الصرف"}</button>
+    </form>
+  );
+}
+
+function TransferForm({ stores, items, onDone }: { stores: Store[]; items: Item[]; onDone: () => void }) {
+  const [form, setForm] = useState({ from_store: "", to_store: "", item: "", date: today(), quantity: "", memo: "" });
+  const { busy, error, submit } = useSubmit("/ops/stock-transfer/", onDone);
+
+  useEffect(() => {
+    setForm((prev) => ({
+      ...prev,
+      from_store: prev.from_store || stores[0]?.id || "",
+      to_store: prev.to_store || stores[1]?.id || "",
+      item: prev.item || items[0]?.id || "",
+    }));
+  }, [stores, items]);
+
+  return (
+    <form
+      className="card"
+      style={{ marginBottom: 16 }}
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit(form);
+      }}
+    >
+      <div className="card-title">تحويل بين المستودعين</div>
+      <p className="page-sub" style={{ marginBottom: 12 }}>
+        القيمة تنتقل مع الكمية، ولا يظهر أي مصروف.
+      </p>
+      {error && <div className="alert alert-error">{error}</div>}
+      <div className="row">
+        <div className="field">
+          <label>من مستودع</label>
+          <select value={form.from_store} onChange={(e) => setForm({ ...form, from_store: e.target.value })} required>
+            {stores.map((s) => (
+              <option key={s.id} value={s.id}>{s.display_name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>إلى مستودع</label>
+          <select value={form.to_store} onChange={(e) => setForm({ ...form, to_store: e.target.value })} required>
+            {stores.map((s) => (
+              <option key={s.id} value={s.id}>{s.display_name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>الصنف</label>
+          <select value={form.item} onChange={(e) => setForm({ ...form, item: e.target.value })} required>
+            {items.map((i) => (
+              <option key={i.id} value={i.id}>{i.display_name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>التاريخ</label>
+          <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required />
+        </div>
+        <div className="field">
+          <label>الكمية</label>
+          <input type="number" step="0.001" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} required />
+        </div>
+        <div className="field">
+          <label>ملاحظة</label>
+          <input value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
+        </div>
+      </div>
+      <button className="btn" disabled={busy}>{busy ? "جارٍ الحفظ…" : "تنفيذ التحويل"}</button>
+    </form>
+  );
+}
+
+function CountForm({ stores, items, onDone }: { stores: Store[]; items: Item[]; onDone: () => void }) {
+  const [form, setForm] = useState({ store: "", item: "", date: today(), counted_quantity: "", memo: "" });
+  const { busy, error, submit } = useSubmit("/ops/stock-count/", onDone);
+
+  useEffect(() => {
+    setForm((prev) => ({
+      ...prev,
+      store: prev.store || stores[0]?.id || "",
+      item: prev.item || items[0]?.id || "",
+    }));
+  }, [stores, items]);
+
+  return (
+    <form
+      className="card"
+      style={{ marginBottom: 16 }}
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit(form);
+      }}
+    >
+      <div className="card-title">جرد فعلي</div>
+      <p className="page-sub" style={{ marginBottom: 12 }}>
+        اكتب الكمية الموجودة فعلًا؛ الفرق يُسجَّل تلقائيًا كفروقات جرد.
+      </p>
+      {error && <div className="alert alert-error">{error}</div>}
+      <div className="row">
+        <div className="field">
+          <label>المستودع</label>
+          <select value={form.store} onChange={(e) => setForm({ ...form, store: e.target.value })} required>
+            {stores.map((s) => (
+              <option key={s.id} value={s.id}>{s.display_name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>الصنف</label>
+          <select value={form.item} onChange={(e) => setForm({ ...form, item: e.target.value })} required>
+            {items.map((i) => (
+              <option key={i.id} value={i.id}>{i.display_name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>التاريخ</label>
+          <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required />
+        </div>
+        <div className="field">
+          <label>الكمية الموجودة فعلًا</label>
+          <input type="number" step="0.001" value={form.counted_quantity} onChange={(e) => setForm({ ...form, counted_quantity: e.target.value })} required />
+        </div>
+        <div className="field">
+          <label>ملاحظة</label>
+          <input value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
+        </div>
+      </div>
+      <button className="btn" disabled={busy}>{busy ? "جارٍ الحفظ…" : "حفظ الجرد"}</button>
+    </form>
+  );
+}

@@ -34,9 +34,37 @@ def status_by_code(farm, code):
     return status
 
 
-def next_tag(farm, animal_type=None):
-    """Suggest the next visible number so field staff do not have to invent one."""
-    prefix = (animal_type.code[:2].upper() + "-") if animal_type else ""
+def branch_by_code(farm, code):
+    """Look up a branch row. Returns None when the farm has no such branch."""
+    return CatalogItem.objects.filter(
+        farm=farm, type_id=CatalogTypeCode.BRANCH, code=code
+    ).first()
+
+
+def tag_prefix(animal_type=None, branch=None):
+    """The letters a branch's numbers start with.
+
+    Each branch counts from one, so each needs letters of its own or the two
+    sequences would collide on the farm-wide unique tag. The letters live on
+    the branch row as `tag_prefix`, so a farm that adds a third branch names
+    its own prefix instead of waiting for a release.
+    """
+    if branch is not None:
+        letters = (branch.metadata or {}).get("tag_prefix") or branch.code[:2]
+        return f"{letters.upper()}-"
+    if animal_type is not None:
+        return f"{animal_type.code[:2].upper()}-"
+    return ""
+
+
+def next_tag(farm, animal_type=None, branch=None):
+    """Suggest the next visible number so field staff do not have to invent one.
+
+    Counting runs over the prefix, not over the branch: an animal moved to the
+    other branch keeps the number it was tagged with, and that number must
+    never be handed out twice.
+    """
+    prefix = tag_prefix(animal_type, branch)
     existing = Animal.all_objects.filter(farm=farm, tag__startswith=prefix).values_list("tag", flat=True)
     top = 0
     for tag in existing:
@@ -80,7 +108,7 @@ def create_animal(
     status = status or status_by_code(farm, STATUS_ACTIVE)
     animal = Animal.objects.create(
         farm=farm,
-        tag=tag or next_tag(farm, animal_type),
+        tag=tag or next_tag(farm, animal_type, extra.get("branch")),
         name=name,
         animal_type=animal_type,
         breed=breed,
@@ -149,6 +177,44 @@ def change_status(animal, status, *, date=None, note="", actor=None):
     return animal
 
 
+@transaction.atomic
+def change_branch(animal, branch, *, date=None, note="", actor=None):
+    """Move an animal between branches.
+
+    A lamb born in breeding and pushed into the fattening pen changes which
+    branch carries its feed and its sale, so the move is an event on its
+    timeline, never a silent field edit.
+    """
+    if branch is not None and branch.farm_id != animal.farm_id:
+        raise ValidationError("the branch belongs to another farm")
+    old = animal.branch
+    if old and branch and old.id == branch.id:
+        return animal
+
+    animal.branch = branch
+    animal.save(update_fields=["branch", "updated_at", "updated_by"])
+    AnimalEvent.objects.create(
+        farm=animal.farm,
+        animal=animal,
+        event_type=AnimalEventType.BRANCH,
+        happened_on=date or animal.updated_at.date(),
+        title=f"نقل إلى فرع {branch.display_name}" if branch else "إخراج من الفروع",
+        detail=note,
+        data={"from": old.code if old else "", "to": branch.code if branch else ""},
+    )
+    record(
+        AuditAction.UPDATE,
+        "animal",
+        animal.id,
+        farm=animal.farm,
+        label=f"branch of {animal.tag}",
+        old={"branch": old.code if old else ""},
+        new={"branch": branch.code if branch else ""},
+        user=actor,
+    )
+    return animal
+
+
 def mark_sold(animal, *, date, actor=None):
     animal.is_on_farm = False
     animal.exited_at = date
@@ -210,6 +276,7 @@ def register_birth(
             mother=mother,
             father=father,
             location=spec.get("location") or mother.location,
+            branch=spec.get("branch") or mother.branch,
             acquisition=Acquisition.BORN,
             entered_at=happened_on,
             custom_fields=spec.get("custom_fields"),
@@ -307,6 +374,8 @@ def add_health_record(
             memo=f"{kind} - {animal.tag}",
             subject_type="animal",
             subject_id=animal.id,
+            # A vet bill belongs to the branch the animal is kept in.
+            branch=animal.branch,
             actor=actor,
         )
 

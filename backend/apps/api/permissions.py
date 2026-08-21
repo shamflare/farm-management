@@ -5,7 +5,7 @@ Every request works inside one farm. The farm comes from the `X-Farm` header
 against the user's membership in that farm - never against a hardcoded role.
 """
 from rest_framework import permissions
-from rest_framework.exceptions import NotFound, PermissionDenied
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 
 from apps.accounts.models import Membership, has_permission
 from apps.core.models import Farm
@@ -102,3 +102,19 @@ def require(request, code):
     if not has_permission(request.user, farm, code):
         raise PermissionDenied(f"missing permission: {code}")
     return farm
+
+
+def confirm_password(request, field="password"):
+    """Make the caller prove they are still the person who logged in.
+
+    A destructive action is worth more than a token that has been sitting in a
+    browser for hours, so the sensitive endpoints ask for the password again.
+    Failures are deliberately vague about which part was wrong, and the password
+    itself never reaches the audit log.
+    """
+    supplied = (request.data or {}).get(field) or ""
+    if not supplied:
+        raise ValidationError({field: "أدخل كلمة مرورك لتأكيد العملية"})
+    if not request.user.check_password(supplied):
+        raise PermissionDenied("كلمة المرور غير صحيحة")
+    return True

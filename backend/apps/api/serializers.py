@@ -5,6 +5,7 @@ guess a label. Write serializers accept ids and validate against the farm.
 """
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from apps.accounts.models import Membership, Permission, Role, User
@@ -19,9 +20,13 @@ from apps.audit.models import AuditLog
 from apps.catalog.models import CatalogItem, CatalogType
 from apps.core.models import Currency, Farm
 from apps.customfields.models import FieldDefinition, FieldValue
+from apps.assets.models import FoundingCost
+from apps.inventory.models import InventoryItem, InventoryStore, StockMovement
 from apps.ledger.models import Account, ApprovalRule, JournalEntry, LedgerLine
+from apps.production.models import MilkProduction, MilkSale
 from apps.operations.models import AnimalPurchase, AnimalSale, PurchaseItem, SaleItem
 from apps.parties.models import Party
+from apps.theme import services as theme_services
 from apps.theme.models import Theme
 
 
@@ -179,12 +184,14 @@ class LedgerLineSerializer(serializers.ModelSerializer):
     account_code = serializers.CharField(source="account.code", read_only=True)
     account_name = serializers.CharField(source="account.display_name", read_only=True)
     account_type = serializers.CharField(source="account.type", read_only=True)
+    branch_name = serializers.CharField(source="branch.display_name", read_only=True, default="")
 
     class Meta:
         model = LedgerLine
         fields = [
             "id", "account", "account_code", "account_name", "account_type",
             "debit", "credit", "memo", "subject_type", "subject_id",
+            "branch", "branch_name",
         ]
 
 
@@ -244,11 +251,14 @@ class AnimalListSerializer(serializers.ModelSerializer):
     status_name = serializers.CharField(source="status.display_name", read_only=True)
     status_code = serializers.CharField(source="status.code", read_only=True)
     location_name = serializers.CharField(source="location.display_name", read_only=True, default="")
+    branch_name = serializers.CharField(source="branch.display_name", read_only=True, default="")
+    branch_code = serializers.CharField(source="branch.code", read_only=True, default="")
 
     class Meta:
         model = Animal
         fields = [
             "id", "tag", "name", "animal_type", "type_name", "breed", "breed_name",
+            "branch", "branch_name", "branch_code",
             "sex", "birth_date", "status", "status_name", "status_code",
             "location", "location_name", "current_weight", "is_alive", "is_on_farm",
             "photo", "mother", "father",
@@ -261,12 +271,14 @@ class AnimalSerializer(serializers.ModelSerializer):
     status_name = serializers.CharField(source="status.display_name", read_only=True)
     mother_tag = serializers.CharField(source="mother.tag", read_only=True, default="")
     father_tag = serializers.CharField(source="father.tag", read_only=True, default="")
+    branch_name = serializers.CharField(source="branch.display_name", read_only=True, default="")
     custom_fields = serializers.DictField(required=False)
 
     class Meta:
         model = Animal
         fields = [
             "id", "tag", "name", "animal_type", "type_name", "breed", "breed_name",
+            "branch", "branch_name",
             "status", "status_name", "location", "sex", "birth_date",
             "mother", "mother_tag", "father", "father_tag", "acquisition",
             "entered_at", "exited_at", "purchase_price", "purchase_currency",
@@ -392,7 +404,7 @@ class ThemeSerializer(serializers.ModelSerializer):
         model = Theme
         fields = [
             "id", "status", "version", "brand_name", "brand_tagline", "logo",
-            "logo_dark", "favicon", "colors", "font_family", "font_scale",
+            "logo_data", "logo_dark", "favicon", "colors", "font_family", "font_scale",
             "corner_radius", "density", "dark_mode_enabled", "sidebar",
             "dashboard_widgets", "published_at", "tokens",
         ]
@@ -400,6 +412,13 @@ class ThemeSerializer(serializers.ModelSerializer):
 
     def get_tokens(self, obj):
         return obj.token_payload()
+
+    def validate_logo_data(self, value):
+        """One rule, defined next to the theme it protects."""
+        try:
+            return theme_services.validate_logo_data(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict["logo_data"])
 
 
 # --- command payloads -------------------------------------------------------
@@ -414,6 +433,7 @@ class ExpenseCommandSerializer(serializers.Serializer):
     paid_by_party = serializers.UUIDField(required=False, allow_null=True)
     supplier = serializers.UUIDField(required=False, allow_null=True)
     animal = serializers.UUIDField(required=False, allow_null=True)
+    branch = serializers.UUIDField(required=False, allow_null=True)
     memo = serializers.CharField(required=False, allow_blank=True, default="")
     reference = serializers.CharField(required=False, allow_blank=True, default="")
     currency = serializers.CharField(required=False, allow_blank=True)
@@ -435,6 +455,7 @@ class IncomeCommandSerializer(serializers.Serializer):
     income_account = serializers.UUIDField(required=False, allow_null=True)
     into_account = serializers.UUIDField(required=False, allow_null=True)
     customer = serializers.UUIDField(required=False, allow_null=True)
+    branch = serializers.UUIDField(required=False, allow_null=True)
     memo = serializers.CharField(required=False, allow_blank=True, default="")
     reference = serializers.CharField(required=False, allow_blank=True, default="")
     currency = serializers.CharField(required=False, allow_blank=True)
@@ -536,3 +557,251 @@ class OpeningBalanceSerializer(serializers.Serializer):
         child=serializers.DictField(), required=False, default=list
     )
     memo = serializers.CharField(required=False, allow_blank=True, default="الرصيد الافتتاحي")
+
+
+# --------------------------------------------------------------------------
+# Feed stores
+# --------------------------------------------------------------------------
+
+class InventoryStoreSerializer(serializers.ModelSerializer):
+    display_name = serializers.CharField(read_only=True)
+    branch_name = serializers.CharField(source="branch.display_name", read_only=True, default="")
+    branch_code = serializers.CharField(source="branch.code", read_only=True, default="")
+    account_code = serializers.CharField(source="account.code", read_only=True, default="")
+
+    class Meta:
+        model = InventoryStore
+        fields = [
+            "id", "name", "name_ar", "display_name", "branch", "branch_name", "branch_code",
+            "account", "account_code", "location", "notes", "is_active", "sort_order",
+        ]
+        read_only_fields = ["id", "account"]
+
+
+class InventoryItemSerializer(serializers.ModelSerializer):
+    display_name = serializers.CharField(read_only=True)
+    category_name = serializers.CharField(source="category.display_name", read_only=True, default="")
+    unit_name = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = InventoryItem
+        fields = [
+            "id", "name", "name_ar", "display_name", "category", "category_name",
+            "unit", "unit_name", "reorder_level", "notes", "is_active", "sort_order",
+        ]
+        read_only_fields = ["id"]
+
+
+class StockMovementSerializer(serializers.ModelSerializer):
+    store_name = serializers.CharField(source="store.display_name", read_only=True)
+    item_name = serializers.CharField(source="item.display_name", read_only=True)
+    unit_name = serializers.CharField(source="item.unit_name", read_only=True, default="")
+    branch_name = serializers.CharField(
+        source="store.branch.display_name", read_only=True, default=""
+    )
+    supplier_name = serializers.CharField(source="supplier.name", read_only=True, default="")
+
+    class Meta:
+        model = StockMovement
+        fields = [
+            "id", "store", "store_name", "branch_name", "item", "item_name", "unit_name",
+            "kind", "happened_on", "quantity", "unit_cost", "total_cost",
+            "supplier", "supplier_name", "journal_entry", "memo", "attachments",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class StockReceiveSerializer(serializers.Serializer):
+    store = serializers.UUIDField()
+    item = serializers.UUIDField()
+    date = serializers.DateField()
+    quantity = serializers.DecimalField(max_digits=14, decimal_places=3, min_value=Decimal("0"))
+    unit_cost = serializers.DecimalField(
+        max_digits=20, decimal_places=4, required=False, allow_null=True
+    )
+    total_cost = serializers.DecimalField(
+        max_digits=20, decimal_places=4, required=False, allow_null=True
+    )
+    supplier = serializers.UUIDField(required=False, allow_null=True)
+    from_account = serializers.UUIDField(required=False, allow_null=True)
+    paid_by_party = serializers.UUIDField(required=False, allow_null=True)
+    memo = serializers.CharField(required=False, allow_blank=True, default="")
+    currency = serializers.CharField(required=False, allow_blank=True)
+    attachments = serializers.ListField(required=False)
+    idempotency_key = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate(self, data):
+        if data.get("unit_cost") is None and data.get("total_cost") is None:
+            raise serializers.ValidationError("give either the unit cost or the total cost")
+        if not any(data.get(key) for key in ("from_account", "paid_by_party", "supplier")):
+            raise serializers.ValidationError(
+                "choose who paid: a farm account, a person paying from their pocket, "
+                "or a supplier on credit"
+            )
+        return data
+
+
+class StockIssueSerializer(serializers.Serializer):
+    store = serializers.UUIDField()
+    item = serializers.UUIDField()
+    date = serializers.DateField()
+    quantity = serializers.DecimalField(max_digits=14, decimal_places=3, min_value=Decimal("0"))
+    animal = serializers.UUIDField(required=False, allow_null=True)
+    memo = serializers.CharField(required=False, allow_blank=True, default="")
+    idempotency_key = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class StockTransferSerializer(serializers.Serializer):
+    from_store = serializers.UUIDField()
+    to_store = serializers.UUIDField()
+    item = serializers.UUIDField()
+    date = serializers.DateField()
+    quantity = serializers.DecimalField(max_digits=14, decimal_places=3, min_value=Decimal("0"))
+    memo = serializers.CharField(required=False, allow_blank=True, default="")
+    idempotency_key = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class StockCountSerializer(serializers.Serializer):
+    store = serializers.UUIDField()
+    item = serializers.UUIDField()
+    date = serializers.DateField()
+    counted_quantity = serializers.DecimalField(
+        max_digits=14, decimal_places=3, min_value=Decimal("0")
+    )
+    memo = serializers.CharField(required=False, allow_blank=True, default="")
+    idempotency_key = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class StockWriteOffSerializer(serializers.Serializer):
+    store = serializers.UUIDField()
+    item = serializers.UUIDField()
+    date = serializers.DateField()
+    quantity = serializers.DecimalField(max_digits=14, decimal_places=3, min_value=Decimal("0"))
+    memo = serializers.CharField(required=False, allow_blank=True, default="")
+    idempotency_key = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+# --------------------------------------------------------------------------
+# Milk
+# --------------------------------------------------------------------------
+
+class MilkProductionSerializer(serializers.ModelSerializer):
+    branch_name = serializers.CharField(source="branch.display_name", read_only=True, default="")
+
+    class Meta:
+        model = MilkProduction
+        fields = [
+            "id", "happened_on", "branch", "branch_name", "session", "liters",
+            "milking_animals", "notes", "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
+
+
+class MilkProductionCommandSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    liters = serializers.DecimalField(max_digits=12, decimal_places=3, min_value=Decimal("0"))
+    branch = serializers.UUIDField(required=False, allow_null=True)
+    session = serializers.ChoiceField(
+        choices=["morning", "evening", "day"], required=False, default="day"
+    )
+    milking_animals = serializers.IntegerField(required=False, allow_null=True, min_value=0)
+    notes = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class MilkSaleSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(read_only=True)
+    unit_name = serializers.CharField(source="unit.display_name", read_only=True, default="")
+    branch_name = serializers.CharField(source="branch.display_name", read_only=True, default="")
+    customer_name = serializers.CharField(source="customer.name", read_only=True, default="")
+
+    class Meta:
+        model = MilkSale
+        fields = [
+            "id", "happened_on", "branch", "branch_name", "product", "product_name",
+            "unit", "unit_name", "quantity", "unit_price", "total_price", "currency",
+            "customer", "customer_name", "received_into_account", "journal_entry",
+            "notes", "attachments", "created_at",
+        ]
+        read_only_fields = fields
+
+
+class MilkSaleCommandSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    quantity = serializers.DecimalField(max_digits=12, decimal_places=3, min_value=Decimal("0"))
+    unit_price = serializers.DecimalField(
+        max_digits=20, decimal_places=4, required=False, allow_null=True
+    )
+    total_price = serializers.DecimalField(
+        max_digits=20, decimal_places=4, required=False, allow_null=True
+    )
+    product = serializers.UUIDField(required=False, allow_null=True)
+    unit = serializers.UUIDField(required=False, allow_null=True)
+    branch = serializers.UUIDField(required=False, allow_null=True)
+    customer = serializers.UUIDField(required=False, allow_null=True)
+    into_account = serializers.UUIDField(required=False, allow_null=True)
+    currency = serializers.CharField(required=False, allow_blank=True)
+    notes = serializers.CharField(required=False, allow_blank=True, default="")
+    attachments = serializers.ListField(required=False)
+    idempotency_key = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate(self, data):
+        if data.get("unit_price") is None and data.get("total_price") is None:
+            raise serializers.ValidationError("give either the unit price or the total price")
+        if not data.get("into_account") and not data.get("customer"):
+            raise serializers.ValidationError(
+                "choose the account that received the money, or the customer who owes it"
+            )
+        return data
+
+
+# --------------------------------------------------------------------------
+# Founding costs
+# --------------------------------------------------------------------------
+
+class FoundingCostSerializer(serializers.ModelSerializer):
+    type_name = serializers.CharField(read_only=True)
+    branch_name = serializers.CharField(source="branch.display_name", read_only=True, default="")
+    supplier_name = serializers.CharField(source="supplier.name", read_only=True, default="")
+
+    class Meta:
+        model = FoundingCost
+        fields = [
+            "id", "happened_on", "name", "asset_type", "type_name", "branch", "branch_name",
+            "amount", "currency", "quantity", "supplier", "supplier_name",
+            "paid_from_account", "paid_by_party", "journal_entry", "notes",
+            "attachments", "created_at",
+        ]
+        read_only_fields = fields
+
+
+class FoundingCostCommandSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    name = serializers.CharField(max_length=160)
+    amount = serializers.DecimalField(max_digits=20, decimal_places=4, min_value=Decimal("0"))
+    asset_type = serializers.UUIDField(required=False, allow_null=True)
+    branch = serializers.UUIDField(required=False, allow_null=True)
+    quantity = serializers.DecimalField(
+        max_digits=12, decimal_places=3, required=False, default=Decimal("1")
+    )
+    supplier = serializers.UUIDField(required=False, allow_null=True)
+    from_account = serializers.UUIDField(required=False, allow_null=True)
+    paid_by_party = serializers.UUIDField(required=False, allow_null=True)
+    currency = serializers.CharField(required=False, allow_blank=True)
+    notes = serializers.CharField(required=False, allow_blank=True, default="")
+    attachments = serializers.ListField(required=False)
+    idempotency_key = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate(self, data):
+        if not any(data.get(key) for key in ("from_account", "paid_by_party", "supplier")):
+            raise serializers.ValidationError(
+                "choose who paid: a farm account, a person paying from their pocket, "
+                "or a supplier on credit"
+            )
+        return data
+
+
+class BranchChangeSerializer(serializers.Serializer):
+    branch = serializers.UUIDField(required=False, allow_null=True)
+    date = serializers.DateField(required=False, allow_null=True)
+    note = serializers.CharField(required=False, allow_blank=True, default="")

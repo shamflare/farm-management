@@ -513,3 +513,47 @@ tbody tr:hover td {
     padding: 16px;
   }
 }
+
+/* --- confirmation dialog -------------------------------------------------
+   Sits above everything and dims the page behind it, so the only thing left
+   to do is read the sentence and answer it. */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 100;
+}
+
+.modal {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 22px;
+  width: min(460px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+.modal-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.modal-message {
+  color: var(--color-text-muted);
+  margin: 0 0 14px;
+  line-height: 1.7;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-start;
+  margin-top: 18px;
+}

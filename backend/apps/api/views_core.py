@@ -13,7 +13,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 
 from apps.accounts.models import Membership, Permission, Role, User
 from apps.api.mixins import FarmScopedViewSet, ok
-from apps.api.permissions import FarmPermission, resolve_farm
+from apps.api.permissions import FarmPermission, confirm_password, resolve_farm
 from apps.api.serializers import (
     AuditLogSerializer,
     CatalogItemSerializer,
@@ -29,7 +29,7 @@ from apps.api.serializers import (
     UserSerializer,
 )
 from apps.audit.models import AuditAction, AuditLog
-from apps.audit.services import record
+from apps.audit.services import record, snapshot
 from apps.catalog.models import CatalogItem, CatalogType
 from apps.core.models import Farm
 from apps.customfields.models import FieldDefinition
@@ -121,8 +121,41 @@ class FarmViewSet(viewsets.ModelViewSet):
     """Farms the caller belongs to. Multi-farm is supported from day one."""
 
     serializer_class = FarmSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [FarmPermission]
     queryset = Farm.objects.select_related("base_currency").all()
+    audit_entity = "farm"
+    audit_fields = ("name", "timezone", "country", "is_active")
+    # Every member reads the farm they work in; only settings.edit renames it.
+    # Creating or removing a farm is not something this API offers at all.
+    required_permissions = {
+        "list": None,
+        "retrieve": None,
+        "update": "settings.edit",
+        "partial_update": "settings.edit",
+        "default": "settings.edit",
+    }
+
+    def create(self, request, *args, **kwargs):
+        raise ValidationError({"detail": "farms are not created through this endpoint"})
+
+    def destroy(self, request, *args, **kwargs):
+        raise ValidationError(
+            {"detail": "a farm holds every record in the system and cannot be deleted here"}
+        )
+
+    def perform_update(self, serializer):
+        before = snapshot(serializer.instance, self.audit_fields)
+        farm = serializer.save()
+        record(
+            AuditAction.UPDATE,
+            self.audit_entity,
+            farm.id,
+            farm=farm,
+            label=farm.name,
+            old=before,
+            new=snapshot(farm, self.audit_fields),
+        )
+        return farm
 
     def get_queryset(self):
         if self.request.user.is_platform_admin:
@@ -359,6 +392,40 @@ class MembershipViewSet(FarmScopedViewSet):
         return ok(MembershipSerializer(membership).data)
 
 
+class ChangePasswordView(APIView):
+    """Change your own password.
+
+    Resetting someone else's password is an owner's job and lives on the
+    membership endpoint. This is the other half: everyone can change their own,
+    and nobody needs an owner to do it for them. The current password is asked
+    for so a walk-up to an unlocked screen cannot lock the real user out.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        confirm_password(request, field="current_password")
+        new_password = (request.data or {}).get("new_password") or ""
+        if not new_password:
+            raise ValidationError({"new_password": "أدخل كلمة المرور الجديدة"})
+        try:
+            validate_password(new_password, user=request.user)
+        except DjangoValidationError as exc:
+            raise ValidationError({"new_password": list(exc.messages)})
+
+        request.user.set_password(new_password)
+        request.user.save(update_fields=["password"])
+        record(
+            AuditAction.UPDATE,
+            "user",
+            request.user.id,
+            label=f"غيّر {request.user.username} كلمة مروره",
+            new={"password_changed": True},
+            user=request.user,
+        )
+        return ok({"changed": True})
+
+
 class PermissionListView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -408,7 +475,10 @@ class ThemeDraftView(APIView):
 
     def patch(self, request):
         farm = resolve_farm(request)
-        draft, problems = theme_services.save_draft(farm, request.data, actor=request.user)
+        try:
+            draft, problems = theme_services.save_draft(farm, request.data, actor=request.user)
+        except DjangoValidationError as exc:
+            raise ValidationError(getattr(exc, "message_dict", {"detail": exc.messages}))
         return Response(
             {"draft": ThemeSerializer(draft).data, "problems": problems},
             status=status.HTTP_200_OK,

@@ -10,6 +10,7 @@ from apps.animals.models import Animal, Birth, HealthRecord, WeightRecord
 from apps.api.mixins import FarmScopedViewSet, ok
 from apps.api.serializers import (
     AnimalEventSerializer,
+    BranchChangeSerializer,
     AnimalListSerializer,
     AnimalSerializer,
     BirthCommandSerializer,
@@ -34,10 +35,11 @@ def lookup(model, farm, value, field="id"):
 
 class AnimalViewSet(FarmScopedViewSet):
     queryset = Animal.objects.select_related(
-        "animal_type", "breed", "status", "location", "mother", "father"
+        "animal_type", "branch", "breed", "status", "location", "mother", "father"
     ).all()
     filterset_fields = {
         "animal_type": ["exact"],
+        "branch": ["exact"],
         "breed": ["exact"],
         "status": ["exact"],
         "location": ["exact"],
@@ -53,13 +55,14 @@ class AnimalViewSet(FarmScopedViewSet):
     search_fields = ["tag", "name", "ear_tag", "chip_number", "barcode"]
     ordering_fields = ["tag", "birth_date", "created_at", "current_weight"]
     audit_entity = "animal"
-    audit_fields = ("tag", "name", "sex", "status", "location", "current_weight")
+    audit_fields = ("tag", "name", "sex", "branch", "status", "location", "current_weight")
     required_permissions = {
         "list": "animals.view",
         "retrieve": "animals.view",
         "create": "animals.create",
         "update": "animals.edit",
         "partial_update": "animals.edit",
+        "move_branch": "animals.edit",
         "destroy": "animals.delete",
         "default": "animals.view",
     }
@@ -99,6 +102,26 @@ class AnimalViewSet(FarmScopedViewSet):
             except DjangoValidationError as exc:
                 raise ValidationError(exc.message_dict if hasattr(exc, "message_dict") else str(exc))
         return instance
+
+    @action(detail=True, methods=["post"], url_path="branch")
+    def move_branch(self, request, pk=None):
+        """Move one animal between branches, leaving a trace on its timeline."""
+        animal = self.get_object()
+        serializer = BranchChangeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        branch = lookup(CatalogItem, self.farm, data.get("branch"))
+        try:
+            animal_services.change_branch(
+                animal,
+                branch,
+                date=data.get("date"),
+                note=data.get("note", ""),
+                actor=request.user,
+            )
+        except DjangoValidationError as exc:
+            raise ValidationError(exc.message_dict if hasattr(exc, "message_dict") else str(exc))
+        return ok(AnimalSerializer(animal).data)
 
     @action(detail=True, methods=["get"])
     def timeline(self, request, pk=None):
@@ -169,8 +192,11 @@ class AnimalViewSet(FarmScopedViewSet):
 
     @action(detail=False, methods=["get"], url_path="next-tag")
     def next_tag(self, request):
-        animal_type = lookup(CatalogItem, self.farm, request.query_params.get("animal_type"))
-        return ok({"tag": animal_services.next_tag(self.farm, animal_type)})
+        """The number the next animal of this type, in this branch, should carry."""
+        farm = self.farm
+        animal_type = lookup(CatalogItem, farm, request.query_params.get("animal_type"))
+        branch = lookup(CatalogItem, farm, request.query_params.get("branch"))
+        return ok({"tag": animal_services.next_tag(farm, animal_type, branch)})
 
     @action(detail=False, methods=["get"])
     def summary(self, request):

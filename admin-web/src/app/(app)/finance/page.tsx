@@ -67,6 +67,7 @@ export default function FinancePage() {
     () => catalog.filter((c) => c.type === "revenue_category"),
     [catalog]
   );
+  const branches = useMemo(() => catalog.filter((c) => c.type === "branch"), [catalog]);
 
   async function loadEntries() {
     const params = new URLSearchParams({ page_size: "40" });
@@ -145,6 +146,7 @@ export default function FinancePage() {
           {tab === "expense" && (
             <ExpenseForm
               categories={expenseCategories}
+              branches={branches}
               cashAccounts={cashAccounts}
               parties={parties}
               onDone={(msg) => {
@@ -157,6 +159,7 @@ export default function FinancePage() {
           {tab === "income" && (
             <IncomeForm
               categories={revenueCategories}
+              branches={branches}
               cashAccounts={cashAccounts}
               parties={parties.filter((p) => p.kind === "customer")}
               onDone={(msg) => {
@@ -280,18 +283,27 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 function ExpenseForm({
   categories,
+  branches,
   cashAccounts,
   parties,
   onDone,
   onError,
 }: {
   categories: Catalog[];
+  branches: Catalog[];
   cashAccounts: Account[];
   parties: Party[];
   onDone: (message: string) => void;
   onError: (message: string) => void;
 }) {
-  const [form, setForm] = useState({ date: today(), amount: "", category: "", payer: "", memo: "" });
+  const [form, setForm] = useState({
+    date: today(),
+    amount: "",
+    category: "",
+    branch: "",
+    payer: "",
+    memo: "",
+  });
   const [busy, setBusy] = useState(false);
 
   const payerOptions = [
@@ -312,6 +324,7 @@ function ExpenseForm({
       date: form.date,
       amount: form.amount,
       category: form.category || null,
+      branch: form.branch || null,
       memo: form.memo,
     };
     if (mode === "account") payload.from_account = id;
@@ -349,6 +362,15 @@ function ExpenseForm({
           </select>
         </div>
         <div className="field">
+          <label>الفرع</label>
+          <select value={form.branch} onChange={(e) => setForm({ ...form, branch: e.target.value })}>
+            <option value="">غير محدد</option>
+            {branches.map((item) => (
+              <option key={item.id} value={item.id}>{item.display_name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
           <label>من دفع؟</label>
           <select value={form.payer} onChange={(e) => setForm({ ...form, payer: e.target.value })} required>
             <option value="">اختر…</option>
@@ -369,18 +391,27 @@ function ExpenseForm({
 
 function IncomeForm({
   categories,
+  branches,
   cashAccounts,
   parties,
   onDone,
   onError,
 }: {
   categories: Catalog[];
+  branches: Catalog[];
   cashAccounts: Account[];
   parties: Party[];
   onDone: (message: string) => void;
   onError: (message: string) => void;
 }) {
-  const [form, setForm] = useState({ date: today(), amount: "", category: "", target: "", memo: "" });
+  const [form, setForm] = useState({
+    date: today(),
+    amount: "",
+    category: "",
+    branch: "",
+    target: "",
+    memo: "",
+  });
   const [busy, setBusy] = useState(false);
 
   const targets = [
@@ -392,7 +423,13 @@ function IncomeForm({
     event.preventDefault();
     setBusy(true);
     const [mode, id] = form.target.split(":");
-    const payload: any = { date: form.date, amount: form.amount, category: form.category || null, memo: form.memo };
+    const payload: any = {
+      date: form.date,
+      amount: form.amount,
+      category: form.category || null,
+      branch: form.branch || null,
+      memo: form.memo,
+    };
     if (mode === "account") payload.into_account = id;
     if (mode === "customer") payload.customer = id;
     try {
@@ -422,6 +459,15 @@ function IncomeForm({
           <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
             <option value="">إيرادات أخرى</option>
             {categories.map((item) => (
+              <option key={item.id} value={item.id}>{item.display_name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>الفرع</label>
+          <select value={form.branch} onChange={(e) => setForm({ ...form, branch: e.target.value })}>
+            <option value="">غير محدد</option>
+            {branches.map((item) => (
               <option key={item.id} value={item.id}>{item.display_name}</option>
             ))}
           </select>

@@ -36,6 +36,68 @@ Lists and form presentation are database-driven:
 
 Dynamic fields extend forms; they do not replace structured columns required for accounting, relationships, reporting, or integrity.
 
+### Production branches
+
+The farm is run as two businesses under one roof: breeding (ewes kept for milk
+and lambs) and fattening (animals bought, fed, and sold). Each has to be read
+on its own, so `branch` is a dimension on `LedgerLine`, not on `JournalEntry`.
+One invoice can therefore split across both, and the branch columns always add
+back up to the farm total.
+
+A branch is a `CatalogItem`, not an enum: a farm can rename them or add a third
+from the settings screen. A third row, "shared", carries the costs that belong
+to neither alone - electricity, wages, administration.
+
+Physical facts follow the same dimension. An `Animal` belongs to a branch and
+moving it between them is an event on its timeline. A feed store belongs to a
+branch, so issuing from it needs no extra question about who is being charged.
+
+Numbering follows the branch too. Each branch counts its animals from one and
+carries the letters its numbers start with in `metadata.tag_prefix` - `TR` for
+breeding, `TS` for fattening - so a farm that adds a third branch names its own
+prefix from the settings screen. Counting runs over the prefix rather than the
+branch, so an animal moved across keeps its number and that number is never
+handed out again.
+
+Revenue is chosen from the animal, not from a field someone has to remember to
+fill: an animal sold under the culling reason credits Culled sales, one born on
+the farm credits Offspring sales, and anything else credits Animal sales. Under
+breeding those read as the two income lines the owner asked for; under
+fattening the same rule leaves purchased-and-sold stock on Animal sales.
+
+### Feed stores
+
+`InventoryStore` holds `InventoryItem` rows, and its quantity and value are
+derived from `StockMovement` rows - never stored as running totals, for the
+same reason ledger balances are not.
+
+Feed is an asset while it sits in the store and becomes an expense the day it
+is eaten:
+
+- Receiving debits the store's own asset account under Inventory.
+- Issuing credits that account and debits Feed consumed, carrying the store's
+  branch.
+- Transfers move value between the two stores without creating an expense.
+- Stock counts and write-offs book the difference against Stock loss.
+
+Costing is the weighted moving average. Every receipt re-averages the store;
+every issue leaves at the average of that moment and keeps that cost forever,
+even if a cheaper load arrives the next day.
+
+### Milk
+
+`MilkProduction` logs litres per milking whether or not anything is sold, and
+`MilkSale` records what was sold and posts the money. They are separate on
+purpose: the gap between them is what the farm drank, turned into cheese, or
+lost, and merging the two would hide it.
+
+### Founding costs
+
+`FoundingCost` is the register of what the farm was built with - barn, fence,
+tank, generator. Each row debits Fixed assets, not an expense account, so the
+month the barn was built does not read as a losing month. The register only
+accumulates; anything built later is another row. No depreciation is applied.
+
 ### Theme and branding
 
 A farm owns a published `ThemeConfig` and an optional draft version. It contains brand name, logo references, color tokens, font choice, density, corner style, and navigation preferences.
@@ -48,7 +110,7 @@ The web client renders CSS variables from the validated theme. React Native maps
 2. Animals, types, breeds, parent relationships, births, and timelines.
 3. Accounts, opening balances, ledger, expenses, income, transfers, and approvals.
 4. Partners, worker liabilities, settlements, suppliers, and customers.
-5. Inventory and assets.
+5. Feed stores, milk production, and founding costs.
 6. Reports, exports, notifications, and backup operations.
 7. Dynamic fields, settings, and theme builder.
 

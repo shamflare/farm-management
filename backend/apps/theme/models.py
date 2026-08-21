@@ -60,6 +60,11 @@ class Theme(FarmScopedModel):
     brand_name = models.CharField(max_length=96, blank=True)
     brand_tagline = models.CharField(max_length=160, blank=True)
     logo = models.ImageField(upload_to="branding/", null=True, blank=True)
+    # The same picture, inlined as a data URI. An uploaded file lives on the
+    # server's disk, and a farm hosted on a free plan gets a fresh disk on every
+    # restart -- the logo would quietly vanish. Held here it travels with the
+    # database, and takes precedence over the file when both exist.
+    logo_data = models.TextField(blank=True, default="")
     logo_dark = models.ImageField(upload_to="branding/", null=True, blank=True)
     favicon = models.ImageField(upload_to="branding/", null=True, blank=True)
     colors = models.JSONField(default=dict, blank=True)
@@ -93,7 +98,7 @@ class Theme(FarmScopedModel):
             "brand": {
                 "name": self.brand_name or self.farm.name,
                 "tagline": self.brand_tagline,
-                "logo": self.logo.url if self.logo else None,
+                "logo": self.logo_data or (self.logo.url if self.logo else None),
                 "logo_dark": self.logo_dark.url if self.logo_dark else None,
                 "favicon": self.favicon.url if self.favicon else None,
             },

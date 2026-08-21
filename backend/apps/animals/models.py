@@ -27,6 +27,14 @@ class Acquisition(models.TextChoices):
 class Animal(FarmScopedModel):
     tag = models.CharField(max_length=48, help_text="Visible number the farm uses.")
     name = models.CharField(max_length=96, blank=True)
+    branch = models.ForeignKey(
+        "catalog.CatalogItem",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="animals_in_branch",
+        help_text="Breeding or fattening. Moving an animal between them is an event.",
+    )
     animal_type = models.ForeignKey(
         "catalog.CatalogItem", on_delete=models.PROTECT, related_name="animals_of_type"
     )
@@ -86,6 +94,7 @@ class Animal(FarmScopedModel):
         indexes = [
             models.Index(fields=["farm", "animal_type", "status"]),
             models.Index(fields=["farm", "sex", "is_on_farm"]),
+            models.Index(fields=["farm", "branch", "is_on_farm"]),
         ]
 
     def __str__(self):
@@ -118,6 +127,7 @@ class AnimalEventType(models.TextChoices):
     TREATMENT = "treatment", "Treatment"
     MOVED = "moved", "Moved"
     STATUS = "status", "Status changed"
+    BRANCH = "branch", "Branch changed"
     EXPENSE = "expense", "Expense recorded"
     SOLD = "sold", "Sold"
     DIED = "died", "Died"

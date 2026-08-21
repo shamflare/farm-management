@@ -5,6 +5,11 @@ start command. That command runs again on every restart, which is why this
 wrapper checks for an existing farm first: `seed_demo` posts real ledger
 entries, and running it twice would double the farm's financial history.
 
+Setting `DEMO_RESEED=1` overrides that check and rebuilds the demo farm from
+nothing - the way to refresh a deployed demo after a feature lands that the old
+data knows nothing about. It stays destructive for as long as the variable is
+set, so it is removed once the deploy that needed it is done.
+
 Run:  python manage.py bootstrap_demo
 """
 import os
@@ -20,7 +25,15 @@ class Command(BaseCommand):
     help = "Seed the demo farm if the database is still empty, then set demo passwords."
 
     def handle(self, *args, **options):
-        if Farm.all_objects.exists():
+        if os.getenv("DEMO_RESEED", "") == "1":
+            # Deliberate wipe: the demo data is rebuilt from scratch so a new
+            # feature has something to show. Remove the variable straight after
+            # the deploy, or the next one erases the data again.
+            self.stdout.write(
+                self.style.WARNING("DEMO_RESEED=1 — erasing the demo farm and seeding it again")
+            )
+            call_command("seed_demo", reset=True)
+        elif Farm.all_objects.exists():
             self.stdout.write("database already holds a farm — nothing seeded")
         else:
             self.stdout.write("empty database — seeding the demo farm")

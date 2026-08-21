@@ -7,7 +7,7 @@ rules read rows, not constants.
 from django.db import transaction
 
 from apps.accounts.models import Permission, Role
-from apps.catalog.models import CatalogItem, CatalogType, CatalogTypeCode
+from apps.catalog.models import BranchCode, CatalogItem, CatalogType, CatalogTypeCode
 from apps.core.models import Currency, Farm
 from apps.customfields.models import EntityType, FieldDefinition, FieldType
 from apps.ledger.chart import seed_chart_of_accounts
@@ -26,12 +26,13 @@ PERMISSION_MODULES = [
     ("animals", "الحيوانات", ["view", "create", "edit", "delete", "export"], False),
     ("births", "الولادات", ["view", "create", "edit", "delete"], False),
     ("health", "الصحة واللقاحات", ["view", "create", "edit", "delete"], False),
-    ("finance", "المالية", ["view", "create", "edit", "approve", "reverse", "export"], True),
+    ("finance", "المالية", ["view", "create", "edit", "approve", "reverse", "delete", "export"], True),
     ("purchases", "المشتريات", ["view", "create", "edit", "approve"], False),
     ("sales", "المبيعات", ["view", "create", "edit", "approve"], False),
     ("parties", "الموردون والعملاء", ["view", "create", "edit", "delete"], False),
     ("partners", "الشركاء", ["view", "create", "edit", "delete"], True),
     ("workers", "حسابات العاملين", ["view", "create", "edit", "settle"], True),
+    ("milk", "الحليب", ["view", "create", "edit", "delete"], False),
     ("inventory", "المخزون", ["view", "create", "edit", "delete"], False),
     ("assets", "الأصول", ["view", "create", "edit", "delete"], False),
     ("reports", "التقارير", ["view", "export"], False),
@@ -63,8 +64,8 @@ DEFAULT_ROLES = [
         [
             "dashboard.view", "animals.view", "births.view", "health.view",
             "finance.view", "purchases.view", "sales.view", "parties.view",
-            "partners.view", "inventory.view", "assets.view", "reports.view",
-            "reports.export",
+            "partners.view", "milk.view", "inventory.view", "assets.view",
+            "reports.view", "reports.export",
         ],
     ),
     (
@@ -80,6 +81,7 @@ DEFAULT_ROLES = [
             "sales.view", "sales.create", "sales.edit", "sales.approve",
             "parties.view", "parties.create", "parties.edit",
             "workers.view", "workers.settle",
+            "milk.view", "milk.create", "milk.edit",
             "inventory.view", "inventory.create", "inventory.edit",
             "assets.view", "assets.create", "assets.edit",
             "reports.view", "reports.export", "settings.view",
@@ -94,7 +96,8 @@ DEFAULT_ROLES = [
             "births.view", "births.create", "health.view", "health.create",
             "finance.create", "purchases.view", "purchases.create",
             "sales.view", "sales.create", "parties.view", "parties.create",
-            "inventory.view", "inventory.create", "workers.view",
+            "milk.view", "milk.create", "inventory.view", "inventory.create",
+            "workers.view",
         ],
     ),
     (
@@ -104,7 +107,8 @@ DEFAULT_ROLES = [
         [
             "dashboard.view", "animals.view", "animals.create",
             "births.view", "births.create", "health.view", "health.create",
-            "finance.create", "purchases.create", "inventory.view",
+            "finance.create", "purchases.create",
+            "milk.view", "milk.create", "inventory.view",
         ],
     ),
     (
@@ -116,6 +120,7 @@ DEFAULT_ROLES = [
             "finance.edit", "finance.approve", "finance.reverse", "finance.export",
             "purchases.view", "sales.view", "parties.view", "parties.create",
             "parties.edit", "partners.view", "workers.view", "workers.settle",
+            "milk.view", "inventory.view", "assets.view",
             "reports.view", "reports.export", "audit.view",
         ],
     ),
@@ -123,11 +128,12 @@ DEFAULT_ROLES = [
         "viewer",
         "Read only",
         "قراءة فقط",
-        ["dashboard.view", "animals.view", "births.view", "reports.view"],
+        ["dashboard.view", "animals.view", "births.view", "milk.view", "reports.view"],
     ),
 ]
 
 CATALOG_TYPES = [
+    (CatalogTypeCode.BRANCH, "Branch", "الفرع", False),
     (CatalogTypeCode.ANIMAL_TYPE, "Animal type", "نوع الحيوان", False),
     (CatalogTypeCode.BREED, "Breed", "السلالة", True),
     (CatalogTypeCode.ANIMAL_STATUS, "Animal status", "حالة الحيوان", False),
@@ -143,10 +149,20 @@ CATALOG_TYPES = [
     (CatalogTypeCode.DEATH_REASON, "Death reason", "سبب النفوق", False),
     (CatalogTypeCode.SALE_REASON, "Sale reason", "سبب البيع", False),
     (CatalogTypeCode.DOCUMENT_TYPE, "Document type", "نوع المستند", False),
+    (CatalogTypeCode.MILK_PRODUCT, "Milk product", "منتج الحليب", False),
 ]
 
-# type code -> [(code, english, arabic, parent code or None)]
+# type code -> [(code, english, arabic, parent code or None[, metadata])]
 CATALOG_ITEMS = {
+    # The two production branches the farm is run as, plus a row for the costs
+    # that belong to neither on their own (electricity, wages, admin).
+    CatalogTypeCode.BRANCH: [
+        # Each branch numbers its animals from one, so each carries the letters
+        # its numbers start with. TR = تربية, TS = تسمين.
+        (BranchCode.BREEDING, "Breeding", "التربية", None, {"tag_prefix": "TR"}),
+        (BranchCode.FATTENING, "Fattening", "التسمين", None, {"tag_prefix": "TS"}),
+        (BranchCode.SHARED, "Shared", "مشترك", None, {}),
+    ],
     CatalogTypeCode.ANIMAL_TYPE: [
         ("sheep", "Sheep", "أغنام", None),
         ("goat", "Goat", "ماعز", None),
@@ -180,6 +196,7 @@ CATALOG_ITEMS = {
         ("corn", "Corn", "ذرة", "feed"),
         ("straw", "Straw", "تبن", "feed"),
         ("concentrate", "Concentrated feed", "أعلاف مركزة", "feed"),
+        ("fodder_farming", "Fodder farming", "زراعة الأعلاف", "feed"),
         ("medicine", "Medicine", "أدوية", None),
         ("veterinary", "Veterinary", "بيطرة", None),
         ("wages", "Wages", "أجور عمال", None),
@@ -195,6 +212,7 @@ CATALOG_ITEMS = {
     CatalogTypeCode.REVENUE_CATEGORY: [
         ("animal_sale", "Animal sales", "بيع حيوانات", None),
         ("milk", "Milk", "بيع حليب", None),
+        ("dairy", "Dairy products", "بيع مشتقات الحليب", "milk"),
         ("wool", "Wool", "بيع صوف", None),
         ("manure", "Manure", "بيع سماد", None),
         ("services", "Services", "خدمات", None),
@@ -257,6 +275,14 @@ CATALOG_ITEMS = {
         ("cash_need", "Cash need", "حاجة نقدية", None),
         ("age", "Old age", "كبر السن", None),
     ],
+    CatalogTypeCode.MILK_PRODUCT: [
+        ("raw_milk", "Raw milk", "حليب خام", None),
+        ("cheese", "Cheese", "جبنة", None),
+        ("yoghurt", "Yoghurt", "لبن", None),
+        ("labneh", "Labneh", "لبنة", None),
+        ("ghee", "Ghee", "سمنة", None),
+        ("cream", "Cream", "قشطة", None),
+    ],
     CatalogTypeCode.DOCUMENT_TYPE: [
         ("invoice", "Invoice", "فاتورة", None),
         ("receipt", "Receipt", "إيصال", None),
@@ -270,6 +296,7 @@ CATALOG_ITEMS = {
 ANIMAL_BUILTIN_FIELDS = [
     ("tag", "Animal number", "رقم الحيوان", FieldType.TEXT, True, True),
     ("name", "Name", "الاسم", FieldType.TEXT, False, False),
+    ("branch", "Branch", "الفرع", FieldType.DROPDOWN, False, True),
     ("animal_type", "Type", "النوع", FieldType.DROPDOWN, True, True),
     ("breed", "Breed", "السلالة", FieldType.DROPDOWN, False, True),
     ("sex", "Sex", "الجنس", FieldType.DROPDOWN, True, True),
@@ -290,6 +317,7 @@ EXPENSE_BUILTIN_FIELDS = [
     ("amount", "Amount", "المبلغ", FieldType.CURRENCY, True, True),
     ("date", "Date", "التاريخ", FieldType.DATE, True, True),
     ("category", "Category", "البند", FieldType.DROPDOWN, True, True),
+    ("branch", "Branch", "الفرع", FieldType.DROPDOWN, False, True),
     ("paid_from", "Paid from", "مصدر الدفع", FieldType.DROPDOWN, True, True),
     ("supplier", "Supplier", "المورد", FieldType.RELATION, False, False),
     ("animal", "Related animal", "الحيوان المرتبط", FieldType.RELATION, False, False),
@@ -358,7 +386,9 @@ def seed_catalog_items(farm):
     created = {}
     for type_code, rows in CATALOG_ITEMS.items():
         catalog_type = CatalogType.objects.get(code=type_code)
-        for order, (code, name, name_ar, parent_code) in enumerate(rows):
+        for order, row in enumerate(rows):
+            code, name, name_ar, parent_code = row[:4]
+            metadata = row[4] if len(row) > 4 else {}
             parent = created.get((type_code, parent_code)) if parent_code else None
             item, _ = CatalogItem.objects.get_or_create(
                 farm=farm,
@@ -370,10 +400,75 @@ def seed_catalog_items(farm):
                     "parent": parent,
                     "sort_order": order * 10,
                     "is_system": True,
+                    "metadata": dict(metadata),
                 },
             )
+            # A row seeded before this key existed still needs it. Only the
+            # missing keys are filled, so anything the farm set is left alone.
+            missing = {key: value for key, value in metadata.items() if key not in item.metadata}
+            if missing:
+                item.metadata.update(missing)
+                item.save(update_fields=["metadata", "updated_at", "updated_by"])
             created[(type_code, code)] = item
     return created
+
+
+# One store per production branch: the two are physically separate, so what
+# each branch eats is never inferred from a shared pile.
+DEFAULT_STORES = [
+    ("Breeding feed store", "مستودع أعلاف التربية", BranchCode.BREEDING),
+    ("Fattening feed store", "مستودع أعلاف التسمين", BranchCode.FATTENING),
+]
+
+DEFAULT_INVENTORY_ITEMS = [
+    ("Barley", "شعير", "feed_stock", "kg"),
+    ("Bran", "نخالة", "feed_stock", "kg"),
+    ("Straw", "تبن", "feed_stock", "kg"),
+    ("Concentrate", "علف مركز", "feed_stock", "kg"),
+    ("Corn", "ذرة", "feed_stock", "kg"),
+]
+
+
+@transaction.atomic
+def seed_inventory(farm):
+    """A feed store for each branch, and the usual things kept in them."""
+    from apps.inventory.models import InventoryItem, InventoryStore
+    from apps.inventory.services import create_store
+
+    branches = {
+        item.code: item
+        for item in CatalogItem.objects.filter(farm=farm, type_id=CatalogTypeCode.BRANCH)
+    }
+    for order, (name, name_ar, branch_code) in enumerate(DEFAULT_STORES):
+        if InventoryStore.all_objects.filter(farm=farm, name=name).exists():
+            continue
+        create_store(
+            farm,
+            name=name,
+            name_ar=name_ar,
+            branch=branches.get(branch_code),
+            sort_order=order * 10,
+        )
+
+    categories = {
+        item.code: item
+        for item in CatalogItem.objects.filter(farm=farm, type_id=CatalogTypeCode.INVENTORY_CATEGORY)
+    }
+    units = {
+        item.code: item
+        for item in CatalogItem.objects.filter(farm=farm, type_id=CatalogTypeCode.UNIT)
+    }
+    for order, (name, name_ar, category_code, unit_code) in enumerate(DEFAULT_INVENTORY_ITEMS):
+        InventoryItem.objects.get_or_create(
+            farm=farm,
+            name=name,
+            defaults={
+                "name_ar": name_ar,
+                "category": categories.get(category_code),
+                "unit": units.get(unit_code),
+                "sort_order": order * 10,
+            },
+        )
 
 
 @transaction.atomic
@@ -417,6 +512,7 @@ def bootstrap_farm(*, name, slug, currency_code="USD", timezone="Asia/Damascus")
     seed_catalog_items(farm)
     seed_roles(farm)
     seed_field_definitions(farm)
+    seed_inventory(farm)
     if not farm.theme_set.filter(status="published").exists():
         create_default(farm)
     return farm, created

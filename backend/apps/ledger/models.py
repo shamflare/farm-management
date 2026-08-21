@@ -207,6 +207,18 @@ class LedgerLine(models.Model):
     # Cost attribution: which animal, asset, or party this line belongs to.
     subject_type = models.CharField(max_length=32, blank=True, db_index=True)
     subject_id = models.UUIDField(null=True, blank=True, db_index=True)
+    # Which production branch carries this amount. Lives on the line, not the
+    # entry, so one invoice can be split between breeding and fattening. Null
+    # means the amount was recorded before branches existed, or belongs to
+    # neither on its own.
+    branch = models.ForeignKey(
+        "catalog.CatalogItem",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="ledger_lines",
+        db_index=True,
+    )
     sort_order = models.IntegerField(default=0)
 
     class Meta:
@@ -224,6 +236,7 @@ class LedgerLine(models.Model):
         indexes = [
             models.Index(fields=["account"]),
             models.Index(fields=["subject_type", "subject_id"]),
+            models.Index(fields=["branch"]),
         ]
 
     def __str__(self):

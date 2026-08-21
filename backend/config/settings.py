@@ -54,6 +54,9 @@ INSTALLED_APPS = [
     "apps.animals",
     "apps.parties",
     "apps.operations",
+    "apps.inventory",
+    "apps.production",
+    "apps.assets",
     "apps.theme",
 ]
 

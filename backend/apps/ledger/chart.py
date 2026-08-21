@@ -28,10 +28,15 @@ DEFAULT_ACCOUNTS = [
     ("3900", "Opening balance equity", "رصيد افتتاحي", AccountType.EQUITY, "3000", False),
     ("4000", "Revenue", "الإيرادات", AccountType.INCOME, None, False),
     ("4100", "Animal sales", "مبيعات الحيوانات", AccountType.INCOME, "4000", False),
+    ("4110", "Offspring sales", "مبيعات المواليد", AccountType.INCOME, "4100", False),
+    ("4120", "Culled animal sales", "مبيعات الفرزة", AccountType.INCOME, "4100", False),
+    ("4200", "Milk and dairy sales", "مبيعات الحليب ومشتقاته", AccountType.INCOME, "4000", False),
     ("4900", "Other income", "إيرادات أخرى", AccountType.INCOME, "4000", False),
     ("5000", "Expenses", "المصروفات", AccountType.EXPENSE, None, False),
     ("5100", "Cost of animals sold", "تكلفة الحيوانات المباعة", AccountType.EXPENSE, "5000", False),
     ("5200", "Animal loss on death", "خسائر النفوق", AccountType.EXPENSE, "5000", False),
+    ("5300", "Feed consumed", "تكلفة الأعلاف المستهلكة", AccountType.EXPENSE, "5000", False),
+    ("5400", "Stock loss and waste", "فروقات الجرد والهدر", AccountType.EXPENSE, "5000", False),
     ("5900", "Other expenses", "مصروفات أخرى", AccountType.EXPENSE, "5000", False),
 ]
 
@@ -50,10 +55,15 @@ PARTNER_DRAWINGS = "3200"
 OPENING_EQUITY = "3900"
 REVENUE_ROOT = "4000"
 ANIMAL_SALES = "4100"
+OFFSPRING_SALES = "4110"
+CULLED_SALES = "4120"
+MILK_SALES = "4200"
 OTHER_INCOME = "4900"
 EXPENSE_ROOT = "5000"
 COST_OF_ANIMALS_SOLD = "5100"
 ANIMAL_LOSS = "5200"
+FEED_EXPENSE = "5300"
+STOCK_LOSS = "5400"
 OTHER_EXPENSE = "5900"
 
 
@@ -80,6 +90,38 @@ def seed_chart_of_accounts(farm, currency=None):
         )
         created.append(account)
     return created
+
+
+@transaction.atomic
+def account_for_store(farm, store, *, currency=None):
+    """Give a feed store its own sub-account under Inventory.
+
+    The two stores are physically separate, so their value must be separately
+    readable. Codes are allocated the same way category accounts are.
+    """
+    if store.account_id:
+        return store.account
+
+    parent = get(farm, INVENTORY)
+    count = Account.all_objects.filter(farm=farm, code__startswith=f"{INVENTORY}-").count() + 1
+    code = f"{INVENTORY}-{count:03d}"
+    while Account.all_objects.filter(farm=farm, code=code).exists():
+        count += 1
+        code = f"{INVENTORY}-{count:03d}"
+
+    account = Account.objects.create(
+        farm=farm,
+        code=code,
+        name=store.name,
+        name_ar=store.name_ar or store.name,
+        type=AccountType.ASSET,
+        currency=currency or farm.base_currency,
+        parent=parent,
+        is_system=False,
+    )
+    store.account = account
+    store.save(update_fields=["account", "updated_at", "updated_by"])
+    return account
 
 
 def get(farm, code):

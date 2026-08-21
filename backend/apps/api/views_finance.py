@@ -11,8 +11,8 @@ from rest_framework.views import APIView
 
 from apps.animals.models import Animal
 from apps.animals.services import create_animal
-from apps.api.mixins import FarmScopedViewSet, ok
-from apps.api.permissions import FarmPermission, require, resolve_farm
+from apps.api.mixins import CommandView, FarmScopedViewSet, as_api_error, ok, pick
+from apps.api.permissions import FarmPermission, confirm_password, require, resolve_farm
 from apps.api.serializers import (
     AccountSerializer,
     AnimalPurchaseSerializer,
@@ -51,24 +51,6 @@ from apps.parties.services import (
 
 
 ZERO = Decimal("0")
-
-
-def pick(model, farm, value, label):
-    """Resolve an id inside the current farm, or fail with a clear message."""
-    if not value:
-        return None
-    obj = model.objects.filter(farm=farm, id=value).first()
-    if obj is None:
-        raise ValidationError({label: "not found in this farm"})
-    return obj
-
-
-def as_api_error(exc):
-    if hasattr(exc, "message_dict"):
-        return ValidationError(exc.message_dict)
-    if hasattr(exc, "messages"):
-        return ValidationError({"detail": exc.messages})
-    return ValidationError({"detail": str(exc)})
 
 
 class AccountViewSet(FarmScopedViewSet):
@@ -181,6 +163,8 @@ class JournalEntryViewSet(FarmScopedViewSet):
         "approve": "finance.approve",
         "reject": "finance.approve",
         "reverse": "finance.reverse",
+        "purge": "finance.delete",
+        "purge_preview": "finance.delete",
         "default": "finance.view",
     }
 
@@ -225,6 +209,37 @@ class JournalEntryViewSet(FarmScopedViewSet):
                 "reversal": JournalEntrySerializer(reversal).data,
             }
         )
+
+    @action(detail=True, methods=["get"], url_path="purge-preview")
+    def purge_preview(self, request, pk=None):
+        """What a delete would take with it, before anyone confirms it."""
+        entry = self.get_object()
+        return ok(
+            {
+                "entry": JournalEntrySerializer(entry).data,
+                "also_removed": ledger_services.purge_blockers(entry),
+            }
+        )
+
+    @action(detail=True, methods=["post"])
+    def purge(self, request, pk=None):
+        """Erase an entry for good. Needs the permission and the password.
+
+        Reversal is still the safe correction and stays one click away. This
+        exists because the farm's owner asked to be able to remove a record
+        outright, so it is gated rather than absent: the finance.delete
+        permission, the password typed again, and an audit row holding the
+        numbers that were erased.
+        """
+        entry = self.get_object()
+        confirm_password(request)
+        try:
+            result = ledger_services.purge_entry(
+                entry, actor=request.user, reason=request.data.get("reason", "")
+            )
+        except DjangoValidationError as exc:
+            raise as_api_error(exc)
+        return ok(result)
 
     @action(detail=False, methods=["get"], url_path="pending-approval")
     def pending(self, request):
@@ -504,24 +519,6 @@ class SaleViewSet(FarmScopedViewSet):
         return Response(AnimalSaleSerializer(sale).data, status=201)
 
 
-class CommandView(APIView):
-    """Base for one-shot financial commands."""
-
-    permission_classes = [FarmPermission]
-
-    @property
-    def farm(self):
-        return resolve_farm(self.request)
-
-    def currency_or_default(self, code):
-        if not code:
-            return None
-        currency = Currency.objects.filter(code=code).first()
-        if currency is None:
-            raise ValidationError({"currency": f"unknown currency '{code}'"})
-        return currency
-
-
 class ExpenseCommandView(CommandView):
     required_permissions = {"default": "finance.create"}
 
@@ -546,6 +543,10 @@ class ExpenseCommandView(CommandView):
                 reference=data.get("reference", ""),
                 subject_type="animal" if animal else "",
                 subject_id=animal.id if animal else None,
+                # An expense tied to an animal follows that animal's branch
+                # unless the person recording it said otherwise.
+                branch=pick(CatalogItem, farm, data.get("branch"), "branch")
+                or (animal.branch if animal else None),
                 attachments=data.get("attachments"),
                 idempotency_key=data.get("idempotency_key", ""),
                 actor=request.user,
@@ -575,6 +576,7 @@ class IncomeCommandView(CommandView):
                 currency=self.currency_or_default(data.get("currency")),
                 memo=data.get("memo", ""),
                 reference=data.get("reference", ""),
+                branch=pick(CatalogItem, farm, data.get("branch"), "branch"),
                 idempotency_key=data.get("idempotency_key", ""),
                 actor=request.user,
             )

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { api, formatDate } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
@@ -15,6 +15,8 @@ type Animal = {
   status_name: string;
   status_code: string;
   location_name: string;
+  branch_name: string;
+  branch_code: string;
   sex: string;
   birth_date: string | null;
   current_weight: string | null;
@@ -30,7 +32,13 @@ export default function AnimalsPage() {
   const [rows, setRows] = useState<Animal[]>([]);
   const [count, setCount] = useState(0);
   const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState({ animal_type: "", status: "", sex: "", is_on_farm: "true" });
+  const [filters, setFilters] = useState({
+    branch: "",
+    animal_type: "",
+    status: "",
+    sex: "",
+    is_on_farm: "true",
+  });
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -110,6 +118,15 @@ export default function AnimalsPage() {
             />
           </div>
           <div className="field" style={{ margin: 0 }}>
+            <label>الفرع</label>
+            <select value={filters.branch} onChange={(e) => setFilters({ ...filters, branch: e.target.value })}>
+              <option value="">كل الفروع</option>
+              {(byType["branch"] ?? []).map((item) => (
+                <option key={item.id} value={item.id}>{item.display_name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field" style={{ margin: 0 }}>
             <label>النوع</label>
             <select value={filters.animal_type} onChange={(e) => setFilters({ ...filters, animal_type: e.target.value })}>
               <option value="">الكل</option>
@@ -152,6 +169,7 @@ export default function AnimalsPage() {
             <tr>
               <th>الرقم</th>
               <th>الاسم</th>
+              <th>الفرع</th>
               <th>النوع</th>
               <th>السلالة</th>
               <th>الجنس</th>
@@ -164,12 +182,12 @@ export default function AnimalsPage() {
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={9} className="empty">جارٍ التحميل…</td>
+                <td colSpan={10} className="empty">جارٍ التحميل…</td>
               </tr>
             )}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={9} className="empty">لا توجد نتائج</td>
+                <td colSpan={10} className="empty">لا توجد نتائج</td>
               </tr>
             )}
             {rows.map((animal) => (
@@ -180,6 +198,13 @@ export default function AnimalsPage() {
                   </Link>
                 </td>
                 <td>{animal.name || "—"}</td>
+                <td>
+                  {animal.branch_name ? (
+                    <span className="badge badge-muted">{animal.branch_name}</span>
+                  ) : (
+                    <span className="muted">غير محدد</span>
+                  )}
+                </td>
                 <td>{animal.type_name}</td>
                 <td>{animal.breed_name || "—"}</td>
                 <td>{SEX_LABEL[animal.sex] ?? animal.sex}</td>
@@ -218,6 +243,7 @@ function AnimalForm({
   const [form, setForm] = useState({
     tag: "",
     name: "",
+    branch: "",
     animal_type: "",
     breed: "",
     status: "",
@@ -227,24 +253,37 @@ function AnimalForm({
   });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const suggested = useRef("");
 
   useEffect(() => {
     const types = byType["animal_type"] ?? [];
     const statuses = byType["animal_status"] ?? [];
+    const branches = byType["branch"] ?? [];
     setForm((prev) => ({
       ...prev,
+      branch: prev.branch || branches.find((b) => b.code === "breeding")?.id || "",
       animal_type: prev.animal_type || types[0]?.id || "",
       status: prev.status || statuses.find((s) => s.code === "active")?.id || statuses[0]?.id || "",
     }));
   }, [byType]);
 
+  // Each branch counts from one, so the suggestion has to know which branch
+  // the animal is joining. Switching branch replaces the suggested number but
+  // never a number the user typed themselves.
   useEffect(() => {
     if (!form.animal_type) return;
+    const params = new URLSearchParams({ animal_type: form.animal_type });
+    if (form.branch) params.set("branch", form.branch);
     api
-      .get<{ ok: boolean; data: { tag: string } }>(`/animals/next-tag/?animal_type=${form.animal_type}`)
-      .then((res) => setForm((prev) => (prev.tag ? prev : { ...prev, tag: res.data.tag })))
+      .get<{ ok: boolean; data: { tag: string } }>(`/animals/next-tag/?${params}`)
+      .then((res) => {
+        setForm((prev) =>
+          !prev.tag || prev.tag === suggested.current ? { ...prev, tag: res.data.tag } : prev
+        );
+        suggested.current = res.data.tag;
+      })
       .catch(() => {});
-  }, [form.animal_type]);
+  }, [form.animal_type, form.branch]);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -253,6 +292,7 @@ function AnimalForm({
     try {
       await api.post("/animals/", {
         ...form,
+        branch: form.branch || null,
         breed: form.breed || null,
         location: form.location || null,
         birth_date: form.birth_date || null,
@@ -278,6 +318,15 @@ function AnimalForm({
         <div className="field">
           <label>الاسم</label>
           <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        </div>
+        <div className="field">
+          <label>الفرع</label>
+          <select value={form.branch} onChange={(e) => setForm({ ...form, branch: e.target.value })}>
+            <option value="">—</option>
+            {(byType["branch"] ?? []).map((item) => (
+              <option key={item.id} value={item.id}>{item.display_name}</option>
+            ))}
+          </select>
         </div>
         <div className="field">
           <label>النوع</label>

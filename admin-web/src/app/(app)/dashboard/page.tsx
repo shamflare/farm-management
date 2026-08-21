@@ -18,6 +18,23 @@ type Dashboard = {
     owed_by_farm: number;
     due_to_workers: number;
   };
+  branches: {
+    branch_id: string | null;
+    code: string;
+    name: string;
+    income: number;
+    expenses: number;
+    net_profit: number;
+    animals_on_farm: number;
+  }[];
+  milk: {
+    liters_produced: number;
+    liters_sold: number;
+    daily_average: number;
+    sales_value: number;
+  };
+  founding_total: number;
+  stock_value: number;
   partners: {
     party_id: string;
     name: string;
@@ -104,6 +121,28 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {data.branches?.length > 0 && (
+        <div className="grid grid-3" style={{ marginBottom: 20 }}>
+          {data.branches.map((branch) => (
+            <div className="card" key={branch.code}>
+              <div className="card-title">
+                <span>{branch.name}</span>
+                <Link href="/reports" className="badge">التفاصيل</Link>
+              </div>
+              <div className={`stat-value num ${branch.net_profit >= 0 ? "positive" : "negative"}`}>
+                {money(branch.net_profit, currency)}
+              </div>
+              <div className="stat-hint">
+                دخل {money(branch.income, currency)} · مصروف {money(branch.expenses, currency)}
+              </div>
+              {branch.animals_on_farm > 0 && (
+                <div className="stat-hint">{branch.animals_on_farm} حيوان</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="grid grid-4" style={{ marginBottom: 20 }}>
         <Stat label="النقد المتوفر" value={money(m.cash_on_hand, currency)} hint="الصناديق والحسابات البنكية" />
         <Stat
@@ -126,6 +165,27 @@ export default function DashboardPage() {
         <Stat label="علينا للناس" value={money(m.owed_by_farm, currency)} hint="ذمم الموردين" />
         <Stat label="المواليد في الفترة" value={String(a.newborns_in_period ?? 0)} hint={`${a.births_in_period ?? 0} ولادة`} />
         <Stat label="المباع / النافق" value={`${a.sold ?? 0} / ${a.dead ?? 0}`} hint="محفوظون في السجل ولم يُحذفوا" />
+      </div>
+
+      <div className="grid grid-3" style={{ marginBottom: 20 }}>
+        <Stat
+          label="حليب الفترة"
+          value={`${Number(data.milk?.liters_produced ?? 0).toLocaleString("en-US")} لتر`}
+          hint={`مُباع منه ${Number(data.milk?.liters_sold ?? 0).toLocaleString("en-US")} لتر · ${money(
+            data.milk?.sales_value ?? 0,
+            currency
+          )}`}
+        />
+        <Stat
+          label="قيمة العلف في المستودعات"
+          value={money(data.stock_value ?? 0, currency)}
+          hint="أصل حتى يُصرف للحيوانات"
+        />
+        <Stat
+          label="التكاليف التأسيسية"
+          value={money(data.founding_total ?? 0, currency)}
+          hint="خارج حساب أرباح الفترة"
+        />
       </div>
 
       <div className="grid grid-2">

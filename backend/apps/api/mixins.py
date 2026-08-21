@@ -1,10 +1,13 @@
 """Shared viewset behaviour: farm scoping, soft delete, audit on write."""
 from rest_framework import viewsets
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from apps.api.permissions import FarmPermission, resolve_farm
 from apps.audit.models import AuditAction
 from apps.audit.services import record, snapshot
+from apps.core.models import Currency
 
 
 class FarmScopedViewSet(viewsets.ModelViewSet):
@@ -84,3 +87,40 @@ def ok(data=None, **extra):
         payload["data"] = data
     payload.update(extra)
     return Response(payload)
+
+
+class CommandView(APIView):
+    """Base for one-shot commands that write through a service, not the ORM."""
+
+    permission_classes = [FarmPermission]
+
+    @property
+    def farm(self):
+        return resolve_farm(self.request)
+
+    def currency_or_default(self, code):
+        if not code:
+            return None
+        currency = Currency.objects.filter(code=code).first()
+        if currency is None:
+            raise ValidationError({"currency": f"unknown currency '{code}'"})
+        return currency
+
+
+def pick(model, farm, value, label):
+    """Resolve an id inside the current farm, or fail with a clear message."""
+    if not value:
+        return None
+    obj = model.objects.filter(farm=farm, id=value).first()
+    if obj is None:
+        raise ValidationError({label: "not found in this farm"})
+    return obj
+
+
+def as_api_error(exc):
+    """Turn a Django ValidationError from a service into a DRF one."""
+    if hasattr(exc, "message_dict"):
+        return ValidationError(exc.message_dict)
+    if hasattr(exc, "messages"):
+        return ValidationError({"detail": exc.messages})
+    return ValidationError({"detail": str(exc)})

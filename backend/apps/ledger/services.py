@@ -27,6 +27,9 @@ from apps.ledger.models import (
 
 ZERO = Decimal("0")
 
+# Passed as `branch` to ask for the amounts no branch carries.
+UNASSIGNED = "none"
+
 
 def to_money(value):
     try:
@@ -48,6 +51,7 @@ class Line:
     memo: str = ""
     subject_type: str = ""
     subject_id: object = None
+    branch: object = None
     extra: dict = field(default_factory=dict)
 
     @classmethod
@@ -85,6 +89,7 @@ def post_entry(
     reference="",
     subject_type="",
     subject_id=None,
+    branch=None,
     idempotency_key="",
     attachments=None,
     force_status=None,
@@ -177,6 +182,7 @@ def post_entry(
                 memo=line.memo[:255],
                 subject_type=line.subject_type or subject_type,
                 subject_id=line.subject_id or subject_id,
+                branch=line.branch or branch,
                 sort_order=index,
             )
             for index, line in enumerate(lines)
@@ -284,6 +290,7 @@ def reverse_entry(entry, actor=None, reason="", date=None):
             memo=f"reversal: {line.memo}"[:255],
             subject_type=line.subject_type,
             subject_id=line.subject_id,
+            branch=line.branch,
         )
         for line in entry.lines.select_related("account").all()
     ]
@@ -312,6 +319,128 @@ def reverse_entry(entry, actor=None, reason="", date=None):
         user=actor,
     )
     return reversal
+
+
+def entry_snapshot(entry):
+    """Everything about an entry, flat enough to store in an audit row.
+
+    A purge leaves nothing behind in the ledger, so this snapshot is the only
+    remaining record of what the numbers were. It is written before the delete.
+    """
+    return {
+        "number": entry.number,
+        "date": entry.date.isoformat(),
+        "kind": entry.kind,
+        "status": entry.status,
+        "amount": str(entry.amount),
+        "currency": entry.currency_id,
+        "memo": entry.memo,
+        "reference": entry.reference,
+        "subject_type": entry.subject_type,
+        "subject_id": str(entry.subject_id) if entry.subject_id else "",
+        "idempotency_key": entry.idempotency_key,
+        "created_at": entry.created_at.isoformat() if entry.created_at else "",
+        "created_by": entry.created_by.username if entry.created_by else "",
+        "lines": [
+            {
+                "account_code": line.account.code,
+                "account_name": line.account.name_ar or line.account.name,
+                "debit": str(line.debit),
+                "credit": str(line.credit),
+                "memo": line.memo,
+                "branch": line.branch.display_name if line.branch else "",
+            }
+            for line in entry.lines.select_related("account", "branch").order_by("sort_order", "id")
+        ],
+    }
+
+
+def purge_blockers(entry):
+    """What still depends on this entry and would have to go with it.
+
+    Returned as readable lines rather than model instances: the caller shows
+    them to whoever asked for the delete, so they approve the full extent of it
+    rather than only the one row they clicked.
+    """
+    from apps.operations.models import AnimalPurchase, AnimalSale
+
+    blockers = []
+    reversal = getattr(entry, "reversed_by", None)
+    if reversal is not None:
+        blockers.append(f"القيد العكسي رقم {reversal.number}")
+    if entry.reverses_id:
+        blockers.append(f"سيبقى القيد الأصلي رقم {entry.reverses.number} بلا عكس")
+
+    ids = [entry.id] + ([reversal.id] if reversal else [])
+    for purchase in AnimalPurchase.all_objects.filter(journal_entry_id__in=ids):
+        blockers.append(f"عملية شراء بتاريخ {purchase.happened_on}")
+    for sale in AnimalSale.all_objects.filter(journal_entry_id__in=ids):
+        blockers.append(f"عملية بيع بتاريخ {sale.happened_on}")
+    return blockers
+
+
+@transaction.atomic
+def purge_entry(entry, actor=None, reason=""):
+    """Erase an entry and everything that only exists because of it.
+
+    This is the one path that removes financial history, and it is deliberately
+    narrow. `post_entry` guarantees a balanced ledger, and balances are summed
+    from lines rather than stored, so removing an entry with its lines leaves
+    every remaining balance correct — what is lost is the record that the event
+    ever happened. The audit row written here is what remains of it.
+
+    A reversal pair is removed together. Leaving half of one behind would show
+    a correction with nothing to correct, or an entry that reads as cancelled
+    while its mirror is gone.
+    """
+    from apps.operations.models import AnimalPurchase, AnimalSale
+
+    farm = entry.farm
+    reversal = getattr(entry, "reversed_by", None)
+    # The reversal points at the entry it mirrors under PROTECT, so it has to be
+    # removed first or the database refuses to let the original go.
+    doomed = [reversal, entry] if reversal is not None else [entry]
+    if entry.reverses_id:
+        # Deleting a reversal on its own would silently un-cancel the original.
+        raise ValidationError(
+            "this entry is a reversal; delete the entry it reverses to remove both"
+        )
+
+    snapshots = [entry_snapshot(item) for item in doomed]
+    ids = [item.id for item in doomed]
+    keys = [item.idempotency_key for item in doomed if item.idempotency_key]
+
+    # PROTECT on these links exists to stop an accidental cascade. A purge is
+    # not accidental, so the operations go too: without their entry they would
+    # claim a purchase or a sale the books know nothing about.
+    operations = []
+    for model, label in ((AnimalPurchase, "شراء"), (AnimalSale, "بيع")):
+        # all_objects, not objects: a soft-deleted operation is hidden from the
+        # app but still holds the protecting link in the database.
+        for row in model.all_objects.filter(journal_entry_id__in=ids):
+            operations.append(f"{label} {row.happened_on}")
+            row.delete(hard=True)
+
+    # Without this the entry's idempotency key would survive it, and an offline
+    # client replaying the command would be answered "already done" forever.
+    ProcessedCommand.objects.filter(
+        Q(key__in=keys) | Q(result_id__in=[str(i) for i in ids])
+    ).delete()
+
+    record(
+        AuditAction.DELETE,
+        "journal_entry",
+        entry.id,
+        farm=farm,
+        label=(reason or f"حذف نهائي للقيد رقم {entry.number}")[:255],
+        old={"entries": snapshots, "operations": operations},
+        new={"purged": True, "reason": reason},
+        user=actor,
+    )
+
+    for item in doomed:
+        item.delete(hard=True)
+    return {"entries": len(doomed), "operations": operations}
 
 
 def account_balances(farm, *, as_of=None, types=None, only_active=True):
@@ -411,13 +540,21 @@ def account_statement(account, *, date_from=None, date_to=None, limit=None):
     return {"account": account, "opening_balance": opening, "closing_balance": running, "rows": rows}
 
 
-def profit_and_loss(farm, *, date_from=None, date_to=None):
-    """Income minus expenses for a period, from posted lines only."""
+def profit_and_loss(farm, *, date_from=None, date_to=None, branch=None):
+    """Income minus expenses for a period, from posted lines only.
+
+    `branch` narrows the report to one production branch; pass the string
+    "none" for the amounts that were never attributed to any branch.
+    """
     lines = LedgerLine.objects.filter(entry__farm=farm, entry__status=EntryStatus.POSTED)
     if date_from:
         lines = lines.filter(entry__date__gte=date_from)
     if date_to:
         lines = lines.filter(entry__date__lte=date_to)
+    if branch == UNASSIGNED:
+        lines = lines.filter(branch__isnull=True)
+    elif branch is not None:
+        lines = lines.filter(branch=branch)
 
     def totals_for(account_type):
         rows = (
@@ -451,6 +588,46 @@ def profit_and_loss(farm, *, date_from=None, date_to=None):
         "total_expenses": expense_total,
         "net_profit": income_total - expense_total,
     }
+
+
+def branch_comparison(farm, *, date_from=None, date_to=None):
+    """One profit and loss column per branch, side by side.
+
+    This is the report the whole two-branch split exists for: what breeding
+    earned, what fattening earned, and what neither of them carries alone.
+    """
+    from apps.catalog.models import CatalogItem, CatalogTypeCode
+
+    branches = list(
+        CatalogItem.objects.filter(farm=farm, type_id=CatalogTypeCode.BRANCH).order_by(
+            "sort_order", "name"
+        )
+    )
+    columns = []
+    for branch in branches:
+        report = profit_and_loss(farm, date_from=date_from, date_to=date_to, branch=branch)
+        columns.append(
+            {
+                "branch_id": str(branch.id),
+                "code": branch.code,
+                "name": branch.display_name,
+                **report,
+            }
+        )
+
+    unassigned = profit_and_loss(farm, date_from=date_from, date_to=date_to, branch=UNASSIGNED)
+    if unassigned["total_income"] or unassigned["total_expenses"]:
+        columns.append(
+            {
+                "branch_id": None,
+                "code": UNASSIGNED,
+                "name": "غير موزّع",
+                **unassigned,
+            }
+        )
+
+    total = profit_and_loss(farm, date_from=date_from, date_to=date_to)
+    return {"branches": columns, "farm_total": total}
 
 
 def cash_position(farm, *, as_of=None):
