@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, formatDate, money } from "@/lib/api";
+import { api, download, formatDate, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 
 type Catalog = { id: string; code: string; display_name: string; type: string };
@@ -76,11 +76,23 @@ export default function FoundingCostsPage() {
             ما صُرف مرة واحدة لبناء المزرعة · لا يدخل في أرباح الشهر، ويتراكم مع كل إضافة جديدة
           </p>
         </div>
-        {can("assets.create") && (
-          <button className="btn" onClick={() => setShowForm((v) => !v)}>
-            {showForm ? "إغلاق" : "+ إضافة بند تأسيسي"}
-          </button>
-        )}
+        <div style={{ display: "flex", gap: 10 }}>
+          {can("reports.export") && (
+            <button
+              className="btn btn-ghost"
+              onClick={() =>
+                download("/export/founding-costs/").catch((err) => setError(err.message))
+              }
+            >
+              ⬇ تصدير CSV
+            </button>
+          )}
+          {can("assets.create") && (
+            <button className="btn" onClick={() => setShowForm((v) => !v)}>
+              {showForm ? "إغلاق" : "+ إضافة بند تأسيسي"}
+            </button>
+          )}
+        </div>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}

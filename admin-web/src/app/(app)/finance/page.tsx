@@ -1,8 +1,9 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { api, formatDate, money } from "@/lib/api";
+import { api, download, formatDate, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 type Account = { id: string; code: string; display_name: string; type: string; is_cash: boolean; balance: number };
 type Catalog = { id: string; code: string; display_name: string; type: string };
@@ -56,6 +57,9 @@ export default function FinancePage() {
   const [tab, setTab] = useState<"expense" | "income" | "transfer">("expense");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [purging, setPurging] = useState<{ entry: Entry; alsoRemoved: string[] } | null>(null);
+  const [purgeBusy, setPurgeBusy] = useState(false);
+  const [purgeError, setPurgeError] = useState("");
 
   const canReadBooks = can("finance.view");
   const cashAccounts = useMemo(() => accounts.filter((a) => a.is_cash), [accounts]);
@@ -102,6 +106,37 @@ export default function FinancePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kind, canReadBooks]);
 
+  async function startPurge(entry: Entry) {
+    setPurgeError("");
+    try {
+      const preview = await api.get<{ data: { also_removed: string[] } }>(
+        `/entries/${entry.id}/purge-preview/`
+      );
+      setPurging({ entry, alsoRemoved: preview.data.also_removed });
+    } catch (err: any) {
+      setError(err.message);
+    }
+  }
+
+  async function confirmPurge(password: string) {
+    if (!purging) return;
+    setPurgeBusy(true);
+    setPurgeError("");
+    try {
+      await api.post(`/entries/${purging.entry.id}/purge/`, {
+        password,
+        reason: "حذف نهائي من شاشة المالية",
+      });
+      setPurging(null);
+      setNotice("تم الحذف النهائي — بقي أثره في سجل التدقيق وحده");
+      loadEntries();
+    } catch (err: any) {
+      setPurgeError(err.message);
+    } finally {
+      setPurgeBusy(false);
+    }
+  }
+
   async function act(entryId: string, action: string) {
     const reason = action === "reverse" ? window.prompt("سبب عكس القيد؟") ?? "" : "";
     try {
@@ -115,6 +150,20 @@ export default function FinancePage() {
 
   return (
     <>
+      {purging && (
+        <ConfirmDialog
+          title={`حذف القيد رقم ${purging.entry.number} نهائيًا`}
+          message="العكس بقيد مضاد هو التصحيح الآمن ويبقى بضغطة واحدة. الحذف النهائي يمحو القيد من الدفتر، ولا يبقى منه إلا صورته في سجل التدقيق."
+          consequences={purging.alsoRemoved}
+          requirePassword
+          confirmLabel="احذف نهائيًا"
+          busy={purgeBusy}
+          error={purgeError}
+          onCancel={() => setPurging(null)}
+          onConfirm={confirmPurge}
+        />
+      )}
+
       <div className="page-head">
         <div>
           <h1 className="page-title">المالية</h1>
@@ -124,6 +173,14 @@ export default function FinancePage() {
               : "سجّل ما صرفته؛ دفتر القيود والأرصدة يطّلع عليها من يملك صلاحية المالية"}
           </p>
         </div>
+        {can("finance.export") && (
+          <button
+            className="btn btn-ghost"
+            onClick={() => download("/export/entries/").catch((err) => setError(err.message))}
+          >
+            ⬇ تصدير القيود CSV
+          </button>
+        )}
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
@@ -241,6 +298,14 @@ export default function FinancePage() {
                     )}
                     {entry.status === "posted" && can("finance.reverse") && entry.kind !== "reversal" && (
                       <button className="btn btn-sm btn-ghost" onClick={() => act(entry.id, "reverse")}>عكس</button>
+                    )}
+                    {can("finance.delete") && (
+                      <>
+                        {" "}
+                        <button className="btn btn-sm btn-danger" onClick={() => startPurge(entry)}>
+                          حذف نهائي
+                        </button>
+                      </>
                     )}
                   </td>
                 </tr>

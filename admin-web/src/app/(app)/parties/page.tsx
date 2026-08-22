@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { api, formatDate, money } from "@/lib/api";
+import { api, download, formatDate, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 
 type Summary = {
@@ -172,11 +172,21 @@ ${reasons.join("  ·  ")}
           <h1 className="page-title">الأشخاص والحسابات</h1>
           <p className="page-sub">لكل شخص حساب حقيقي في الدفتر — الأرصدة محسوبة من القيود</p>
         </div>
+        <div style={{ display: "flex", gap: 10 }}>
+        {can("reports.export") && (
+          <button
+            className="btn btn-ghost"
+            onClick={() => download("/export/parties/").catch((err) => setError(err.message))}
+          >
+            ⬇ تصدير CSV
+          </button>
+        )}
         {can("parties.create") && (
           <button className="btn" onClick={startCreate}>
             {showForm && !editing ? "إغلاق" : "+ إضافة شخص"}
           </button>
         )}
+        </div>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}

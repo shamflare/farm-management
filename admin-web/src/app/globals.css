@@ -557,3 +557,73 @@ tbody tr:hover td {
   justify-content: flex-start;
   margin-top: 18px;
 }
+
+/* --------------------------------------------------------------------------
+   Printing
+   --------------------------------------------------------------------------
+   A report printed from the browser is the PDF. Generating one on the server
+   would mean shipping an Arabic font and a heavy library to a free host to
+   reproduce what the browser already renders correctly, right-to-left and all.
+
+   So printing hides the furniture — sidebar, buttons, forms — and leaves the
+   numbers on white paper.
+-------------------------------------------------------------------------- */
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  body {
+    background: #fff;
+    color: #000;
+  }
+
+  .sidebar,
+  .tabs,
+  .btn,
+  .modal-backdrop,
+  form.card,
+  .no-print {
+    display: none !important;
+  }
+
+  .shell {
+    display: block;
+  }
+
+  .main {
+    padding: 0;
+    max-width: none;
+  }
+
+  .card,
+  .table-wrap {
+    border: 1px solid #999;
+    box-shadow: none;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .grid {
+    gap: 8px;
+  }
+
+  table {
+    font-size: 11pt;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  a {
+    text-decoration: none;
+    color: inherit;
+  }
+
+  /* The page title carries the farm name so a printed sheet stands alone. */
+  .page-title::after {
+    content: " — " attr(data-farm);
+    font-weight: 400;
+  }
+}

@@ -93,6 +93,57 @@ export const api = {
   delete: <T,>(path: string) => request<T>(path, { method: "DELETE" }),
 };
 
+/**
+ * Fetch a file the API guards behind a token and hand it to the browser.
+ *
+ * A plain <a href> cannot carry the Authorization header, so the bytes are
+ * fetched, wrapped in a blob, and clicked programmatically. The filename comes
+ * from the server, which knows the Arabic name it chose.
+ */
+export async function download(path: string, fallbackName = "download") {
+  const token = getToken();
+  const farm = getFarm();
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  if (farm) headers["X-Farm"] = farm;
+
+  const response = await fetch(`${BASE}${path}`, { headers, cache: "no-store" });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new ApiError(response.status, text ? JSON.parse(text) : null);
+  }
+
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const match = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+  const name = match ? decodeURIComponent(match[1]) : fallbackName;
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+/** Read a picked file into the base64 data URI the API stores. */
+export function readFileAsDataUri(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("تعذّر قراءة الملف"));
+    reader.readAsDataURL(file);
+  });
+}
+
+export function formatBytes(size: number) {
+  if (size < 1024) return `${size} بايت`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(0)} كيلوبايت`;
+  return `${(size / 1024 / 1024).toFixed(1)} ميغابايت`;
+}
+
 export async function login(username: string, password: string) {
   const response = await fetch(`${BASE}/auth/login/`, {
     method: "POST",

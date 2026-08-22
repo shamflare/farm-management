@@ -32,6 +32,29 @@ DEFAULT_SIDEBAR = [
     {"key": "settings", "label_ar": "الإعدادات", "icon": "settings", "permission": "settings.view"},
 ]
 
+# The cards the dashboard can show. The farm chooses which of them it wants
+# and in what order; the labels live in the client that draws them.
+DASHBOARD_WIDGETS = [
+    "alerts",
+    "branches",
+    "cash",
+    "profit",
+    "livestock",
+    "worker_due",
+    "receivable",
+    "payable",
+    "births",
+    "sold_dead",
+    "milk",
+    "stock",
+    "founding",
+    "herd",
+    "cash_accounts",
+    "partners",
+]
+
+DEFAULT_DASHBOARD_WIDGETS = [{"key": key, "visible": True} for key in DASHBOARD_WIDGETS]
+
 ALLOWED_FONTS = [
     "Cairo",
     "Tajawal",
@@ -111,6 +134,6 @@ class Theme(FarmScopedModel):
             "density": self.density,
             "dark_mode_enabled": self.dark_mode_enabled,
             "sidebar": self.sidebar or DEFAULT_SIDEBAR,
-            "dashboard_widgets": self.dashboard_widgets or [],
+            "dashboard_widgets": self.dashboard_widgets or list(DEFAULT_DASHBOARD_WIDGETS),
             "published_at": self.published_at.isoformat() if self.published_at else None,
         }

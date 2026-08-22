@@ -430,6 +430,9 @@ class PurchaseViewSet(FarmScopedViewSet):
                     tag=row.get("tag") or None,
                     name=row.get("name", ""),
                     breed=pick(CatalogItem, farm, row.get("breed"), "items.breed"),
+                    # Bought animals belong to a branch from the moment they
+                    # arrive, or their feed and their sale land nowhere.
+                    branch=pick(CatalogItem, farm, row.get("branch"), "items.branch"),
                     sex=row.get("sex") or "unknown",
                     birth_date=row.get("birth_date"),
                     acquisition="purchased",

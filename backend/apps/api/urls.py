@@ -5,6 +5,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from apps.api import views_animals as animals
 from apps.api import views_assets as assets
 from apps.api import views_core as core
+from apps.api import views_files as files
 from apps.api import views_finance as finance
 from apps.api import views_inventory as stock
 from apps.api import views_production as milk
@@ -39,6 +40,7 @@ router.register("milk", milk.MilkProductionViewSet, basename="milk")
 router.register("milk-sales", milk.MilkSaleViewSet, basename="milk-sale")
 
 router.register("founding-costs", assets.FoundingCostViewSet, basename="founding-cost")
+router.register("attachments", files.AttachmentViewSet, basename="attachment")
 
 urlpatterns = [
     path("health/", core.health, name="health"),
@@ -48,6 +50,17 @@ urlpatterns = [
     path("auth/switch-farm/", core.SwitchFarmView.as_view(), name="switch-farm"),
     path("auth/change-password/", core.ChangePasswordView.as_view(), name="change-password"),
     path("permissions/", core.PermissionListView.as_view(), name="permissions"),
+
+    path("attachments/upload/", files.AttachmentUploadView.as_view(), name="attachment-upload"),
+    path(
+        "attachments/<uuid:pk>/primary/",
+        files.AttachmentPrimaryView.as_view(),
+        name="attachment-primary",
+    ),
+    path("alerts/", files.AlertsView.as_view(), name="alerts"),
+    path("export/<str:name>/", files.ExportView.as_view(), name="export"),
+    path("backup/", files.BackupView.as_view(), name="backup"),
+    path("backup/summary/", files.BackupSummaryView.as_view(), name="backup-summary"),
 
     path("theme/", core.ThemeView.as_view(), name="theme"),
     path("theme/draft/", core.ThemeDraftView.as_view(), name="theme-draft"),

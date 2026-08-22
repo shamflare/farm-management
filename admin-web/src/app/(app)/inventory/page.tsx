@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { api, formatDate, formatNumber, money } from "@/lib/api";
+import { api, download, formatDate, formatNumber, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 
 type Store = {
@@ -49,6 +49,7 @@ type Movement = {
 type Page<T> = { count: number; results: T[] };
 type Account = { id: string; display_name: string; is_cash: boolean; type: string };
 type Party = { id: string; name: string; kind: string };
+type Catalog = { id: string; code: string; display_name: string; type: string };
 
 const KIND_LABEL: Record<string, string> = {
   receipt: "استلام",
@@ -60,10 +61,12 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 const FORMS = [
-  { key: "receive", label: "استلام علف" },
-  { key: "issue", label: "صرف للحيوانات" },
-  { key: "transfer", label: "تحويل بين المستودعين" },
-  { key: "count", label: "جرد" },
+  { key: "receive", label: "استلام علف", permission: "inventory.create" },
+  { key: "issue", label: "صرف للحيوانات", permission: "inventory.create" },
+  { key: "transfer", label: "تحويل بين المستودعين", permission: "inventory.create" },
+  { key: "count", label: "جرد", permission: "inventory.edit" },
+  { key: "waste", label: "هدر أو تلف", permission: "inventory.edit" },
+  { key: "setup", label: "الأصناف والمستودعات", permission: "inventory.create" },
 ];
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -77,6 +80,7 @@ export default function InventoryPage() {
   const [movements, setMovements] = useState<Movement[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [parties, setParties] = useState<Party[]>([]);
+  const [catalog, setCatalog] = useState<Catalog[]>([]);
   const [storeFilter, setStoreFilter] = useState("");
   const [openForm, setOpenForm] = useState("");
   const [error, setError] = useState("");
@@ -118,6 +122,10 @@ export default function InventoryPage() {
       .get<Page<Party>>("/parties/?page_size=200")
       .then((res) => setParties(res.results))
       .catch(() => {});
+    api
+      .get<Page<Catalog>>("/catalog/?page_size=300")
+      .then((res) => setCatalog(res.results))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -145,27 +153,35 @@ export default function InventoryPage() {
             مستودع لكل فرع · العلف أصل حتى يُصرف، وعندها يصير تكلفة على فرعه
           </p>
         </div>
-        <div style={{ textAlign: "left" }}>
-          <div className="stat-label">قيمة المخزون</div>
-          <div className="stat-value num">{money(totalValue, currency)}</div>
+        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+          {can("reports.export") && (
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => download("/export/stock/").catch((err) => setError(err.message))}
+            >
+              ⬇ تصدير CSV
+            </button>
+          )}
+          <div style={{ textAlign: "left" }}>
+            <div className="stat-label">قيمة المخزون</div>
+            <div className="stat-value num">{money(totalValue, currency)}</div>
+          </div>
         </div>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
 
-      {can("inventory.create") && (
-        <div className="tabs">
-          {FORMS.map((form) => (
-            <button
-              key={form.key}
-              className={`tab ${openForm === form.key ? "active" : ""}`}
-              onClick={() => setOpenForm(openForm === form.key ? "" : form.key)}
-            >
-              {form.label}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="tabs">
+        {FORMS.filter((form) => can(form.permission)).map((form) => (
+          <button
+            key={form.key}
+            className={`tab ${openForm === form.key ? "active" : ""}`}
+            onClick={() => setOpenForm(openForm === form.key ? "" : form.key)}
+          >
+            {form.label}
+          </button>
+        ))}
+      </div>
 
       {openForm === "receive" && (
         <ReceiveForm
@@ -179,6 +195,17 @@ export default function InventoryPage() {
       {openForm === "issue" && <IssueForm stores={stores} items={items} onDone={refresh} />}
       {openForm === "transfer" && <TransferForm stores={stores} items={items} onDone={refresh} />}
       {openForm === "count" && <CountForm stores={stores} items={items} onDone={refresh} />}
+      {openForm === "waste" && <WasteForm stores={stores} items={items} onDone={refresh} />}
+      {openForm === "setup" && (
+        <SetupForms
+          stores={stores}
+          items={items}
+          branches={catalog.filter((row) => row.type === "branch")}
+          categories={catalog.filter((row) => row.type === "inventory_category")}
+          units={catalog.filter((row) => row.type === "unit")}
+          onDone={refresh}
+        />
+      )}
 
       {lowStock.length > 0 && (
         <div className="alert alert-error">
@@ -607,5 +634,248 @@ function CountForm({ stores, items, onDone }: { stores: Store[]; items: Item[]; 
       </div>
       <button className="btn" disabled={busy}>{busy ? "جارٍ الحفظ…" : "حفظ الجرد"}</button>
     </form>
+  );
+}
+
+
+function WasteForm({ stores, items, onDone }: { stores: Store[]; items: Item[]; onDone: () => void }) {
+  const [form, setForm] = useState({ store: "", item: "", date: today(), quantity: "", memo: "" });
+  const { busy, error, submit } = useSubmit("/ops/stock-write-off/", onDone);
+
+  useEffect(() => {
+    setForm((prev) => ({
+      ...prev,
+      store: prev.store || stores[0]?.id || "",
+      item: prev.item || items[0]?.id || "",
+    }));
+  }, [stores, items]);
+
+  return (
+    <form
+      className="card"
+      style={{ marginBottom: 16 }}
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit(form);
+      }}
+    >
+      <div className="card-title">تسجيل هدر أو تلف</div>
+      <p className="page-sub" style={{ marginBottom: 12 }}>
+        علف فسد أو انسكب أو ضاع. يُقيَّد خسارة على فرع المستودع، لا تكلفة تعليف — فلا
+        يبدو أن الحيوانات أكلت أكثر مما أكلت.
+      </p>
+      {error && <div className="alert alert-error">{error}</div>}
+      <div className="row">
+        <div className="field">
+          <label>المستودع</label>
+          <select value={form.store} onChange={(e) => setForm({ ...form, store: e.target.value })} required>
+            {stores.map((s) => (
+              <option key={s.id} value={s.id}>{s.display_name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>الصنف</label>
+          <select value={form.item} onChange={(e) => setForm({ ...form, item: e.target.value })} required>
+            {items.map((i) => (
+              <option key={i.id} value={i.id}>{i.display_name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>التاريخ</label>
+          <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required />
+        </div>
+        <div className="field">
+          <label>الكمية</label>
+          <input
+            type="number"
+            step="0.001"
+            min="0"
+            value={form.quantity}
+            onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+            required
+          />
+        </div>
+        <div className="field" style={{ flex: "2 1 240px" }}>
+          <label>السبب</label>
+          <input value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
+        </div>
+      </div>
+      <button className="btn" disabled={busy}>{busy ? "جارٍ الحفظ…" : "تسجيل الهدر"}</button>
+    </form>
+  );
+}
+
+function SetupForms({
+  stores,
+  items,
+  branches,
+  categories,
+  units,
+  onDone,
+}: {
+  stores: Store[];
+  items: Item[];
+  branches: Catalog[];
+  categories: Catalog[];
+  units: Catalog[];
+  onDone: () => void;
+}) {
+  const [item, setItem] = useState({ name: "", name_ar: "", category: "", unit: "", reorder_level: "" });
+  const [store, setStore] = useState({ name: "", name_ar: "", branch: "", location: "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setItem((prev) => ({
+      ...prev,
+      category: prev.category || categories.find((c) => c.code === "feed_stock")?.id || "",
+      unit: prev.unit || units.find((u) => u.code === "kg")?.id || "",
+    }));
+  }, [categories, units]);
+
+  async function save(path: string, body: unknown, reset: () => void) {
+    setBusy(true);
+    setError("");
+    try {
+      await api.post(path, body);
+      reset();
+      onDone();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="grid grid-2" style={{ marginBottom: 16 }}>
+      <form
+        className="card"
+        onSubmit={(e) => {
+          e.preventDefault();
+          save(
+            "/inventory-items/",
+            {
+              ...item,
+              name_ar: item.name_ar || item.name,
+              category: item.category || null,
+              unit: item.unit || null,
+              reorder_level: item.reorder_level || 0,
+            },
+            () => setItem({ ...item, name: "", name_ar: "", reorder_level: "" })
+          );
+        }}
+      >
+        <div className="card-title">
+          <span>صنف جديد</span>
+          <span className="badge badge-muted">{items.length} صنف</span>
+        </div>
+        {error && <div className="alert alert-error">{error}</div>}
+        <div className="row">
+          <div className="field">
+            <label>الاسم بالعربية</label>
+            <input
+              value={item.name_ar}
+              onChange={(e) => setItem({ ...item, name_ar: e.target.value })}
+              placeholder="مثال: ذرة صفراء"
+              required
+            />
+          </div>
+          <div className="field">
+            <label>الاسم بالإنجليزية</label>
+            <input
+              value={item.name}
+              onChange={(e) => setItem({ ...item, name: e.target.value })}
+              placeholder="Yellow corn"
+              required
+            />
+          </div>
+          <div className="field">
+            <label>التصنيف</label>
+            <select value={item.category} onChange={(e) => setItem({ ...item, category: e.target.value })}>
+              <option value="">—</option>
+              {categories.map((row) => (
+                <option key={row.id} value={row.id}>{row.display_name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>وحدة القياس</label>
+            <select value={item.unit} onChange={(e) => setItem({ ...item, unit: e.target.value })}>
+              <option value="">—</option>
+              {units.map((row) => (
+                <option key={row.id} value={row.id}>{row.display_name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>حد التنبيه</label>
+            <input
+              type="number"
+              step="0.001"
+              min="0"
+              value={item.reorder_level}
+              onChange={(e) => setItem({ ...item, reorder_level: e.target.value })}
+              placeholder="ينبّهك حين تنزل الكمية إليه"
+            />
+          </div>
+        </div>
+        <button className="btn" disabled={busy}>{busy ? "جارٍ الحفظ…" : "إضافة الصنف"}</button>
+      </form>
+
+      <form
+        className="card"
+        onSubmit={(e) => {
+          e.preventDefault();
+          save(
+            "/stores/",
+            { ...store, name_ar: store.name_ar || store.name, branch: store.branch || null },
+            () => setStore({ ...store, name: "", name_ar: "", location: "" })
+          );
+        }}
+      >
+        <div className="card-title">
+          <span>مستودع جديد</span>
+          <span className="badge badge-muted">{stores.length} مستودع</span>
+        </div>
+        <p className="page-sub" style={{ marginBottom: 12 }}>
+          كل مستودع يأخذ حسابه الخاص تحت المخزون، وكل ما يُصرف منه يُحمَّل على فرعه.
+        </p>
+        <div className="row">
+          <div className="field">
+            <label>الاسم بالعربية</label>
+            <input
+              value={store.name_ar}
+              onChange={(e) => setStore({ ...store, name_ar: e.target.value })}
+              required
+            />
+          </div>
+          <div className="field">
+            <label>الاسم بالإنجليزية</label>
+            <input
+              value={store.name}
+              onChange={(e) => setStore({ ...store, name: e.target.value })}
+              required
+            />
+          </div>
+          <div className="field">
+            <label>الفرع</label>
+            <select value={store.branch} onChange={(e) => setStore({ ...store, branch: e.target.value })}>
+              <option value="">غير محدد</option>
+              {branches.map((row) => (
+                <option key={row.id} value={row.id}>{row.display_name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>الموقع</label>
+            <input value={store.location} onChange={(e) => setStore({ ...store, location: e.target.value })} />
+          </div>
+        </div>
+        <button className="btn" disabled={busy}>{busy ? "جارٍ الحفظ…" : "إضافة المستودع"}</button>
+      </form>
+    </div>
   );
 }

@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { api, money } from "@/lib/api";
+import { api, download, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
+import { visibleWidgets } from "@/lib/theme";
 
 type Dashboard = {
   period: { from: string | null; to: string | null };
@@ -73,10 +74,15 @@ function Stat({
 }
 
 export default function DashboardPage() {
-  const { currency } = useApp();
+  const { can, currency, me, alerts } = useApp();
   const [period, setPeriod] = useState("month");
   const [data, setData] = useState<Dashboard | null>(null);
   const [error, setError] = useState("");
+
+  // The farm chooses which cards it wants from the branding screen; this page
+  // only draws what was asked for, in the order it was asked for.
+  const wanted = visibleWidgets(me?.theme);
+  const show = (key: string) => wanted.includes(key);
 
   useEffect(() => {
     setData(null);
@@ -99,18 +105,59 @@ export default function DashboardPage() {
           <h1 className="page-title">لوحة المعلومات</h1>
           <p className="page-sub">كل رقم هنا محسوب من قيود الدفتر، وليس مُدخلًا يدويًا</p>
         </div>
-        <div className="tabs" style={{ margin: 0 }}>
-          {PERIODS.map((p) => (
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          {can("reports.export") && (
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => download("/export/branches/").catch((err) => setError(err.message))}
+            >
+              ⬇ تصدير الفروع
+            </button>
+          )}
+          <div className="tabs" style={{ margin: 0 }}>
+            {PERIODS.map((p) => (
             <button
               key={p.key}
               className={`tab ${period === p.key ? "active" : ""}`}
               onClick={() => setPeriod(p.key)}
             >
-              {p.label}
-            </button>
-          ))}
+                {p.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
+
+      {show("alerts") && alerts.length > 0 && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card-title">
+            <span>التنبيهات</span>
+            <span className="badge badge-warning">{alerts.length}</span>
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {alerts.map((alert, index) => (
+              <Link
+                key={index}
+                href={alert.link || "/dashboard"}
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  alignItems: "baseline",
+                  color: "inherit",
+                  padding: "6px 0",
+                  borderBottom: "1px solid var(--color-border)",
+                }}
+              >
+                <span>{alert.severity === "danger" ? "🔴" : alert.severity === "warning" ? "🟠" : "🔵"}</span>
+                <span style={{ flex: 1 }}>
+                  <span style={{ fontWeight: 600 }}>{alert.title}</span>
+                  {alert.detail && <div className="stat-hint">{alert.detail}</div>}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {data.pending_approvals > 0 && (
         <div className="alert alert-error" style={{ marginBottom: 20 }}>
@@ -121,7 +168,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {data.branches?.length > 0 && (
+      {show("branches") && data.branches?.length > 0 && (
         <div className="grid grid-3" style={{ marginBottom: 20 }}>
           {data.branches.map((branch) => (
             <div className="card" key={branch.code}>
@@ -144,51 +191,72 @@ export default function DashboardPage() {
       )}
 
       <div className="grid grid-4" style={{ marginBottom: 20 }}>
-        <Stat label="النقد المتوفر" value={money(m.cash_on_hand, currency)} hint="الصناديق والحسابات البنكية" />
-        <Stat
-          label="صافي الربح للفترة"
-          value={money(m.net_profit, currency)}
-          tone={m.net_profit >= 0 ? "positive" : "negative"}
-          hint={`إيراد ${money(m.income, currency)} · مصروف ${money(m.expenses, currency)}`}
-        />
-        <Stat label="قيمة الحيوانات" value={money(a.estimated_value, currency)} hint={`${a.on_farm} حيوان في المزرعة`} />
-        <Stat
-          label="مستحق للعامل"
-          value={money(m.due_to_workers, currency)}
-          tone={m.due_to_workers > 0 ? "negative" : undefined}
-          hint="ما دفعه العاملون من جيوبهم ولم يُسدَّد"
-        />
-      </div>
-
-      <div className="grid grid-4" style={{ marginBottom: 20 }}>
-        <Stat label="لنا عند الناس" value={money(m.owed_to_farm, currency)} hint="ذمم العملاء" />
-        <Stat label="علينا للناس" value={money(m.owed_by_farm, currency)} hint="ذمم الموردين" />
-        <Stat label="المواليد في الفترة" value={String(a.newborns_in_period ?? 0)} hint={`${a.births_in_period ?? 0} ولادة`} />
-        <Stat label="المباع / النافق" value={`${a.sold ?? 0} / ${a.dead ?? 0}`} hint="محفوظون في السجل ولم يُحذفوا" />
-      </div>
-
-      <div className="grid grid-3" style={{ marginBottom: 20 }}>
-        <Stat
-          label="حليب الفترة"
-          value={`${Number(data.milk?.liters_produced ?? 0).toLocaleString("en-US")} لتر`}
-          hint={`مُباع منه ${Number(data.milk?.liters_sold ?? 0).toLocaleString("en-US")} لتر · ${money(
-            data.milk?.sales_value ?? 0,
-            currency
-          )}`}
-        />
-        <Stat
-          label="قيمة العلف في المستودعات"
-          value={money(data.stock_value ?? 0, currency)}
-          hint="أصل حتى يُصرف للحيوانات"
-        />
-        <Stat
-          label="التكاليف التأسيسية"
-          value={money(data.founding_total ?? 0, currency)}
-          hint="خارج حساب أرباح الفترة"
-        />
+        {show("cash") && (
+          <Stat label="النقد المتوفر" value={money(m.cash_on_hand, currency)} hint="الصناديق والحسابات البنكية" />
+        )}
+        {show("profit") && (
+          <Stat
+            label="صافي الربح للفترة"
+            value={money(m.net_profit, currency)}
+            tone={m.net_profit >= 0 ? "positive" : "negative"}
+            hint={`إيراد ${money(m.income, currency)} · مصروف ${money(m.expenses, currency)}`}
+          />
+        )}
+        {show("livestock") && (
+          <Stat label="قيمة الحيوانات" value={money(a.estimated_value, currency)} hint={`${a.on_farm} حيوان في المزرعة`} />
+        )}
+        {show("worker_due") && (
+          <Stat
+            label="مستحق للعامل"
+            value={money(m.due_to_workers, currency)}
+            tone={m.due_to_workers > 0 ? "negative" : undefined}
+            hint="ما دفعه العاملون من جيوبهم ولم يُسدَّد"
+          />
+        )}
+        {show("receivable") && (
+          <Stat label="لنا عند الناس" value={money(m.owed_to_farm, currency)} hint="ذمم العملاء" />
+        )}
+        {show("payable") && (
+          <Stat label="علينا للناس" value={money(m.owed_by_farm, currency)} hint="ذمم الموردين" />
+        )}
+        {show("births") && (
+          <Stat
+            label="المواليد في الفترة"
+            value={String(a.newborns_in_period ?? 0)}
+            hint={`${a.births_in_period ?? 0} ولادة`}
+          />
+        )}
+        {show("sold_dead") && (
+          <Stat label="المباع / النافق" value={`${a.sold ?? 0} / ${a.dead ?? 0}`} hint="محفوظون في السجل ولم يُحذفوا" />
+        )}
+        {show("milk") && (
+          <Stat
+            label="حليب الفترة"
+            value={`${Number(data.milk?.liters_produced ?? 0).toLocaleString("en-US")} لتر`}
+            hint={`مُباع منه ${Number(data.milk?.liters_sold ?? 0).toLocaleString("en-US")} لتر · ${money(
+              data.milk?.sales_value ?? 0,
+              currency
+            )}`}
+          />
+        )}
+        {show("stock") && (
+          <Stat
+            label="قيمة العلف في المستودعات"
+            value={money(data.stock_value ?? 0, currency)}
+            hint="أصل حتى يُصرف للحيوانات"
+          />
+        )}
+        {show("founding") && (
+          <Stat
+            label="التكاليف التأسيسية"
+            value={money(data.founding_total ?? 0, currency)}
+            hint="خارج حساب أرباح الفترة"
+          />
+        )}
       </div>
 
       <div className="grid grid-2">
+        {show("herd") && (
         <div className="card">
           <div className="card-title">
             <span>القطيع</span>
@@ -215,7 +283,9 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+        )}
 
+        {show("cash_accounts") && (
         <div className="card">
           <div className="card-title">الصناديق</div>
           <div className="table-wrap" style={{ border: "none" }}>
@@ -233,9 +303,10 @@ export default function DashboardPage() {
             </table>
           </div>
         </div>
+        )}
       </div>
 
-      {data.partners.length > 0 && (
+      {show("partners") && data.partners.length > 0 && (
         <div className="card" style={{ marginTop: 20 }}>
           <div className="card-title">الشركاء</div>
           <div className="table-wrap" style={{ border: "none" }}>

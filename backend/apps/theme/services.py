@@ -15,6 +15,8 @@ from apps.audit.services import record
 from apps.theme.models import (
     ALLOWED_FONTS,
     DEFAULT_COLORS,
+    DASHBOARD_WIDGETS,
+    DEFAULT_DASHBOARD_WIDGETS,
     DEFAULT_SIDEBAR,
     Theme,
     ThemeStatus,
@@ -154,8 +156,38 @@ def create_default(farm, *, status=ThemeStatus.PUBLISHED):
         brand_name=farm.name,
         colors=dict(DEFAULT_COLORS),
         sidebar=list(DEFAULT_SIDEBAR),
+        dashboard_widgets=list(DEFAULT_DASHBOARD_WIDGETS),
         published_at=timezone.now() if status == ThemeStatus.PUBLISHED else None,
     )
+
+
+def clean_dashboard_widgets(value):
+    """Keep only cards this build knows how to draw, in the order given.
+
+    A card the client cannot render would be an invisible setting the owner
+    keeps toggling with nothing happening, so unknown keys are dropped and any
+    card left unmentioned is appended rather than silently lost.
+    """
+    if not isinstance(value, list):
+        raise ValidationError({"dashboard_widgets": "expected a list of cards"})
+
+    cleaned = []
+    seen = set()
+    for row in value:
+        if isinstance(row, str):
+            row = {"key": row, "visible": True}
+        if not isinstance(row, dict):
+            continue
+        key = row.get("key")
+        if key not in DASHBOARD_WIDGETS or key in seen:
+            continue
+        seen.add(key)
+        cleaned.append({"key": key, "visible": bool(row.get("visible", True))})
+
+    for key in DASHBOARD_WIDGETS:
+        if key not in seen:
+            cleaned.append({"key": key, "visible": True})
+    return cleaned
 
 
 @transaction.atomic
@@ -181,6 +213,8 @@ def save_draft(farm, data, actor=None):
                 setattr(draft, key, merged)
             elif key == "logo_data":
                 setattr(draft, key, validate_logo_data(value))
+            elif key == "dashboard_widgets":
+                setattr(draft, key, clean_dashboard_widgets(value))
             else:
                 setattr(draft, key, value)
     draft.save()

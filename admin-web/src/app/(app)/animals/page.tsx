@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { api, formatDate } from "@/lib/api";
+import { api, download, formatDate } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 
 type Catalog = { id: string; code: string; display_name: string; type: string; parent: string | null };
@@ -88,11 +88,25 @@ export default function AnimalsPage() {
           <h1 className="page-title">الحيوانات</h1>
           <p className="page-sub">{count} حيوان · المباع والنافق يبقيان في السجل والنسب</p>
         </div>
-        {can("animals.create") && (
-          <button className="btn" onClick={() => setShowForm((v) => !v)}>
-            {showForm ? "إغلاق" : "+ إضافة حيوان"}
-          </button>
-        )}
+        <div style={{ display: "flex", gap: 10 }}>
+          {can("animals.export") && (
+            <button
+              className="btn btn-ghost"
+              onClick={() =>
+                download(
+                  `/export/animals/?branch=${filters.branch}&is_on_farm=${filters.is_on_farm}`
+                ).catch((err) => setError(err.message))
+              }
+            >
+              ⬇ تصدير CSV
+            </button>
+          )}
+          {can("animals.create") && (
+            <button className="btn" onClick={() => setShowForm((v) => !v)}>
+              {showForm ? "إغلاق" : "+ إضافة حيوان"}
+            </button>
+          )}
+        </div>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}

@@ -33,6 +33,8 @@ PERMISSION_MODULES = [
     ("partners", "الشركاء", ["view", "create", "edit", "delete"], True),
     ("workers", "حسابات العاملين", ["view", "create", "edit", "settle"], True),
     ("milk", "الحليب", ["view", "create", "edit", "delete"], False),
+    ("attachments", "المرفقات والصور", ["view", "create", "delete"], False),
+    ("backup", "النسخ الاحتياطي", ["export"], True),
     ("inventory", "المخزون", ["view", "create", "edit", "delete"], False),
     ("assets", "الأصول", ["view", "create", "edit", "delete"], False),
     ("reports", "التقارير", ["view", "export"], False),
@@ -65,7 +67,7 @@ DEFAULT_ROLES = [
             "dashboard.view", "animals.view", "births.view", "health.view",
             "finance.view", "purchases.view", "sales.view", "parties.view",
             "partners.view", "milk.view", "inventory.view", "assets.view",
-            "reports.view", "reports.export",
+            "attachments.view", "reports.view", "reports.export",
         ],
     ),
     (
@@ -84,6 +86,7 @@ DEFAULT_ROLES = [
             "milk.view", "milk.create", "milk.edit",
             "inventory.view", "inventory.create", "inventory.edit",
             "assets.view", "assets.create", "assets.edit",
+            "attachments.view", "attachments.create", "attachments.delete",
             "reports.view", "reports.export", "settings.view",
         ],
     ),
@@ -97,7 +100,7 @@ DEFAULT_ROLES = [
             "finance.create", "purchases.view", "purchases.create",
             "sales.view", "sales.create", "parties.view", "parties.create",
             "milk.view", "milk.create", "inventory.view", "inventory.create",
-            "workers.view",
+            "attachments.view", "attachments.create", "workers.view",
         ],
     ),
     (
@@ -109,6 +112,7 @@ DEFAULT_ROLES = [
             "births.view", "births.create", "health.view", "health.create",
             "finance.create", "purchases.create",
             "milk.view", "milk.create", "inventory.view",
+            "attachments.view", "attachments.create",
         ],
     ),
     (
@@ -120,7 +124,7 @@ DEFAULT_ROLES = [
             "finance.edit", "finance.approve", "finance.reverse", "finance.export",
             "purchases.view", "sales.view", "parties.view", "parties.create",
             "parties.edit", "partners.view", "workers.view", "workers.settle",
-            "milk.view", "inventory.view", "assets.view",
+            "milk.view", "inventory.view", "assets.view", "attachments.view",
             "reports.view", "reports.export", "audit.view",
         ],
     ),
@@ -128,7 +132,10 @@ DEFAULT_ROLES = [
         "viewer",
         "Read only",
         "قراءة فقط",
-        ["dashboard.view", "animals.view", "births.view", "milk.view", "reports.view"],
+        [
+            "dashboard.view", "animals.view", "births.view", "milk.view",
+            "attachments.view", "reports.view",
+        ],
     ),
 ]
 

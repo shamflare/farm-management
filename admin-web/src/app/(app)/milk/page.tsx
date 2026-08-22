@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, formatDate, formatNumber, money } from "@/lib/api";
+import { api, download, formatDate, formatNumber, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 
 type Catalog = { id: string; code: string; display_name: string; type: string };
@@ -120,12 +120,22 @@ export default function MilkPage() {
             الكمية اليومية تُسجَّل حتى لو لم تُبَع · المبيعات بند إيراد مستقل لفرع التربية
           </p>
         </div>
-        <div className="tabs" style={{ margin: 0 }}>
-          {PERIODS.map((p) => (
-            <button key={p.key} className={`tab ${period === p.key ? "active" : ""}`} onClick={() => setPeriod(p.key)}>
-              {p.label}
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          {can("reports.export") && (
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => download("/export/milk/").catch((err) => setError(err.message))}
+            >
+              ⬇ تصدير CSV
             </button>
-          ))}
+          )}
+          <div className="tabs" style={{ margin: 0 }}>
+            {PERIODS.map((p) => (
+            <button key={p.key} className={`tab ${period === p.key ? "active" : ""}`} onClick={() => setPeriod(p.key)}>
+                {p.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

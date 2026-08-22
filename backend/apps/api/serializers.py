@@ -18,7 +18,7 @@ from apps.animals.models import (
 )
 from apps.audit.models import AuditLog
 from apps.catalog.models import CatalogItem, CatalogType
-from apps.core.models import Currency, Farm
+from apps.core.models import Attachment, Currency, Farm
 from apps.customfields.models import FieldDefinition, FieldValue
 from apps.assets.models import FoundingCost
 from apps.inventory.models import InventoryItem, InventoryStore, StockMovement
@@ -272,6 +272,7 @@ class AnimalSerializer(serializers.ModelSerializer):
     mother_tag = serializers.CharField(source="mother.tag", read_only=True, default="")
     father_tag = serializers.CharField(source="father.tag", read_only=True, default="")
     branch_name = serializers.CharField(source="branch.display_name", read_only=True, default="")
+    photo_url = serializers.SerializerMethodField()
     custom_fields = serializers.DictField(required=False)
 
     class Meta:
@@ -283,13 +284,19 @@ class AnimalSerializer(serializers.ModelSerializer):
             "mother", "mother_tag", "father", "father_tag", "acquisition",
             "entered_at", "exited_at", "purchase_price", "purchase_currency",
             "ear_tag", "chip_number", "barcode", "color", "current_weight",
-            "photo", "notes", "is_alive", "is_on_farm", "custom_fields",
+            "photo", "photo_url", "notes", "is_alive", "is_on_farm", "custom_fields",
             "created_at", "updated_at",
         ]
         read_only_fields = [
             "id", "purchase_price", "purchase_currency", "is_alive", "is_on_farm",
-            "exited_at", "created_at", "updated_at",
+            "exited_at", "photo_url", "created_at", "updated_at",
         ]
+
+    def get_photo_url(self, obj):
+        """The picture chosen to represent this animal, if one was uploaded."""
+        from apps.core.attachments import primary_image
+
+        return primary_image(obj.farm, "animal", obj.id) or (obj.photo.url if obj.photo else "")
 
 
 class AnimalEventSerializer(serializers.ModelSerializer):
@@ -488,6 +495,7 @@ class PurchaseLineSerializer(serializers.Serializer):
     name = serializers.CharField(required=False, allow_blank=True)
     animal_type = serializers.UUIDField(required=False, allow_null=True)
     breed = serializers.UUIDField(required=False, allow_null=True)
+    branch = serializers.UUIDField(required=False, allow_null=True)
     sex = serializers.CharField(required=False, allow_blank=True)
     birth_date = serializers.DateField(required=False, allow_null=True)
 
@@ -805,3 +813,44 @@ class BranchChangeSerializer(serializers.Serializer):
     branch = serializers.UUIDField(required=False, allow_null=True)
     date = serializers.DateField(required=False, allow_null=True)
     note = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+# --------------------------------------------------------------------------
+# Attachments
+# --------------------------------------------------------------------------
+
+class AttachmentSerializer(serializers.ModelSerializer):
+    is_image = serializers.BooleanField(read_only=True)
+    uploaded_by = serializers.CharField(source="created_by.full_name", read_only=True, default="")
+
+    class Meta:
+        model = Attachment
+        fields = [
+            "id", "subject_type", "subject_id", "kind", "name", "content_type",
+            "size", "data", "note", "is_primary", "is_image", "uploaded_by",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class AttachmentListSerializer(AttachmentSerializer):
+    """The same rows without the bytes, for listings that only need the names."""
+
+    class Meta(AttachmentSerializer.Meta):
+        fields = [field for field in AttachmentSerializer.Meta.fields if field != "data"]
+        read_only_fields = fields
+
+
+class AttachmentCommandSerializer(serializers.Serializer):
+    subject_type = serializers.CharField(max_length=32)
+    subject_id = serializers.UUIDField()
+    data = serializers.CharField(help_text="The file as a base64 data URI.")
+    name = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
+    kind = serializers.ChoiceField(
+        choices=["photo", "invoice", "receipt", "contract", "document"],
+        required=False,
+        default="document",
+    )
+    note = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
+    is_primary = serializers.BooleanField(required=False, default=False)
+

@@ -89,10 +89,26 @@ class MeView(APIView):
             if request.user.is_platform_admin
             else sorted(membership.permission_codes() if membership else [])
         )
+        # The farms this person can switch to, so the client can offer the
+        # choice without a second round trip.
+        if request.user.is_platform_admin:
+            reachable = Farm.objects.filter(is_active=True)
+        else:
+            reachable = Farm.objects.filter(
+                id__in=Membership.objects.filter(
+                    user=request.user, is_active=True
+                ).values("farm_id"),
+                is_active=True,
+            )
+
         return Response(
             {
                 "user": UserSerializer(request.user).data,
                 "farm": FarmSerializer(farm).data,
+                "farms": [
+                    {"id": str(row.id), "slug": row.slug, "name": row.name}
+                    for row in reachable.order_by("name")
+                ],
                 "role": RoleSerializer(membership.role).data if membership else None,
                 "permissions": permissions,
                 "theme": theme_services.published_payload(farm),

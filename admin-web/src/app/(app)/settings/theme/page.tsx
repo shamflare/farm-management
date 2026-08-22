@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { applyTheme } from "@/lib/theme";
+import { applyTheme, DASHBOARD_WIDGETS } from "@/lib/theme";
 import { useApp } from "@/components/AppShell";
 
 type Draft = {
@@ -17,6 +17,7 @@ type Draft = {
   corner_radius: number;
   density: string;
   dark_mode_enabled: boolean;
+  dashboard_widgets: { key: string; visible: boolean }[];
   tokens: any;
 };
 
@@ -95,6 +96,7 @@ export default function ThemePage() {
         corner_radius: draft.corner_radius,
         density: draft.density,
         dark_mode_enabled: draft.dark_mode_enabled,
+        dashboard_widgets: draft.dashboard_widgets,
       };
       const res = await api.patch<{ draft: Draft; problems: Problem[] }>("/theme/draft/", body);
       setDraft(res.draft);
@@ -284,6 +286,87 @@ export default function ThemePage() {
           النسخة المنشورة الحالية: v{draft.tokens.version}
         </div>
       </div>
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="card-title">بطاقات لوحة المعلومات</div>
+        <p className="page-sub" style={{ marginBottom: 12 }}>
+          أطفئ ما لا يهم مزرعتك، وحرّك ما يهمها إلى الأعلى. يُحفظ مع بقية الهوية
+          البصرية ولا يظهر للجميع قبل النشر.
+        </p>
+
+        <div style={{ display: "grid", gap: 6 }}>
+          {widgetRows(draft).map((row, index, all) => {
+            const label =
+              DASHBOARD_WIDGETS.find((widget) => widget.key === row.key)?.label ?? row.key;
+            return (
+              <div
+                key={row.key}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "8px 12px",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: 10,
+                  opacity: row.visible ? 1 : 0.55,
+                }}
+              >
+                <label style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, margin: 0 }}>
+                  <input
+                    type="checkbox"
+                    checked={row.visible}
+                    disabled={!can("theme.edit")}
+                    onChange={(e) => {
+                      const next = [...all];
+                      next[index] = { ...row, visible: e.target.checked };
+                      update({ dashboard_widgets: next });
+                    }}
+                  />
+                  <span style={{ fontWeight: 600 }}>{label}</span>
+                </label>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={index === 0 || !can("theme.edit")}
+                  onClick={() => {
+                    const next = [...all];
+                    [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                    update({ dashboard_widgets: next });
+                  }}
+                >
+                  ▲
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={index === all.length - 1 || !can("theme.edit")}
+                  onClick={() => {
+                    const next = [...all];
+                    [next[index], next[index + 1]] = [next[index + 1], next[index]];
+                    update({ dashboard_widgets: next });
+                  }}
+                >
+                  ▼
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </>
   );
+}
+
+/** The saved order, with any card this build added since appended at the end. */
+function widgetRows(draft: Draft) {
+  const stored = draft.dashboard_widgets ?? [];
+  const known = new Map(stored.map((row) => [row.key, row]));
+  return DASHBOARD_WIDGETS.map(
+    (widget) => known.get(widget.key) ?? { key: widget.key, visible: true }
+  ).sort((a, b) => {
+    const order = stored.map((row) => row.key);
+    const left = order.indexOf(a.key);
+    const right = order.indexOf(b.key);
+    return (left === -1 ? 999 : left) - (right === -1 ? 999 : right);
+  });
 }

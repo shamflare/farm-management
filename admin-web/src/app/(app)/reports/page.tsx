@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, money } from "@/lib/api";
+import { api, download, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 
 const TABS = [
@@ -13,6 +13,15 @@ const TABS = [
   { key: "animals", label: "تقرير القطيع" },
 ];
 
+// Which export answers each tab. The herd tab has its own file.
+const EXPORT_FOR: Record<string, string> = {
+  branches: "branches",
+  trial: "trial-balance",
+  pl: "profit-loss",
+  categories: "profit-loss",
+  animals: "animals",
+};
+
 const PERIODS = [
   { key: "month", label: "هذا الشهر" },
   { key: "year", label: "هذه السنة" },
@@ -20,7 +29,7 @@ const PERIODS = [
 ];
 
 export default function ReportsPage() {
-  const { currency } = useApp();
+  const { can, currency, me } = useApp();
   const [tab, setTab] = useState("branches");
   const [period, setPeriod] = useState("all");
   const [data, setData] = useState<any>(null);
@@ -43,10 +52,30 @@ export default function ReportsPage() {
     <>
       <div className="page-head">
         <div>
-          <h1 className="page-title">التقارير</h1>
+          <h1 className="page-title" data-farm={me?.farm?.name ?? ""}>التقارير</h1>
           <p className="page-sub">مشتقة بالكامل من قيود الدفتر المرحّلة</p>
         </div>
-        {tab !== "trial" && tab !== "animals" && (
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => window.print()}
+            title="الطباعة تنتج PDF من متصفحك، بتنسيق عربي سليم"
+          >
+            🖨 طباعة / PDF
+          </button>
+          {EXPORT_FOR[tab] && can("reports.export") && (
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() =>
+                download(`/export/${EXPORT_FOR[tab]}/?period=${period}`).catch((err) =>
+                  setError(err.message)
+                )
+              }
+            >
+              ⬇ تصدير CSV
+            </button>
+          )}
+          {tab !== "trial" && tab !== "animals" && (
           <div className="tabs" style={{ margin: 0 }}>
             {PERIODS.map((p) => (
               <button key={p.key} className={`tab ${period === p.key ? "active" : ""}`} onClick={() => setPeriod(p.key)}>
@@ -54,7 +83,8 @@ export default function ReportsPage() {
               </button>
             ))}
           </div>
-        )}
+          )}
+        </div>
       </div>
 
       <div className="tabs">

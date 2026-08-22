@@ -145,3 +145,50 @@ class ExchangeRate(models.Model):
 
     def __str__(self):
         return f"{self.from_currency_id}->{self.to_currency_id} {self.rate} @{self.valid_on}"
+
+
+class AttachmentKind(models.TextChoices):
+    PHOTO = "photo", "Photo"
+    INVOICE = "invoice", "Invoice"
+    RECEIPT = "receipt", "Receipt"
+    CONTRACT = "contract", "Contract"
+    DOCUMENT = "document", "Document"
+
+
+class Attachment(BaseModel):
+    """A picture or a document pinned to any record in the system.
+
+    The bytes are held in the row as a data URI rather than on disk. A farm
+    hosted on a free plan gets a fresh disk on every restart, and an invoice
+    that quietly disappears is worse than no invoice at all. The same reasoning
+    already governs the branding logo.
+    """
+
+    farm = models.ForeignKey(Farm, on_delete=models.CASCADE, related_name="attachments")
+    # What this is attached to, without coupling core to every other app.
+    subject_type = models.CharField(max_length=32, db_index=True)
+    subject_id = models.UUIDField(db_index=True)
+    kind = models.CharField(
+        max_length=16, choices=AttachmentKind.choices, default=AttachmentKind.DOCUMENT
+    )
+    name = models.CharField(max_length=200)
+    content_type = models.CharField(max_length=100)
+    size = models.PositiveIntegerField(default=0, help_text="Decoded size in bytes.")
+    data = models.TextField(help_text="The file itself, inlined as a data URI.")
+    note = models.CharField(max_length=255, blank=True)
+    # The one picture that represents the subject - an animal's photo.
+    is_primary = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["farm", "subject_type", "subject_id"]),
+            models.Index(fields=["farm", "kind"]),
+        ]
+
+    def __str__(self):
+        return f"{self.kind} {self.name}"
+
+    @property
+    def is_image(self):
+        return self.content_type.startswith("image/")
