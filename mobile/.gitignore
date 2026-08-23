@@ -1,0 +1,11 @@
+node_modules/
+.expo/
+dist/
+web-build/
+# مجلدا المنصّتين يُولَّدان بـ expo prebuild عند بناء الـ APK
+android/
+ios/
+*.jks
+*.keystore
+.env
+npm-debug.*
