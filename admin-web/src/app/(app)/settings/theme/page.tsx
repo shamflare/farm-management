@@ -4,6 +4,14 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { applyTheme, DASHBOARD_WIDGETS } from "@/lib/theme";
 import { useApp } from "@/components/AppShell";
+import Icon from "@/components/Icon";
+import {
+  Button,
+  ErrorNote,
+  Loading,
+  PageHeader,
+  SuccessNote,
+} from "@/components/ui";
 
 type Draft = {
   id: string;
@@ -41,7 +49,7 @@ const COLOR_LABELS: Record<string, string> = {
 const FONTS = ["Cairo", "Tajawal", "IBM Plex Sans Arabic", "Noto Sans Arabic", "Almarai", "System"];
 
 export default function ThemePage() {
-  const { can, reloadTheme } = useApp();
+  const { can, me, reloadTheme } = useApp();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [problems, setProblems] = useState<Problem[]>([]);
   const [error, setError] = useState("");
@@ -137,46 +145,61 @@ export default function ThemePage() {
     setNotice("تمت الإعادة للإعدادات الافتراضية");
   }
 
-  if (error && !draft) return <div className="alert alert-error">{error}</div>;
-  if (!draft) return <div className="empty">جارٍ التحميل…</div>;
+  if (error && !draft) return <ErrorNote message={error} />;
+  if (!draft) return <Loading />;
 
   const colors = { ...draft.tokens.colors, ...draft.colors };
   const readOnly = !can("theme.edit");
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">الهوية البصرية</h1>
-          <p className="page-sub">
-            الألوان والخط والشعار تُحفظ في الخادم — تغييرها لا يحتاج إصدار تطبيق جديد
-          </p>
-        </div>
+      <PageHeader
+        title="الهوية البصرية"
+        subtitle="الألوان والخط والشعار تُحفظ في الخادم — تغييرها لا يحتاج إصدار تطبيق جديد"
+        farm={me?.farm?.name}
+      >
         {!readOnly && (
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-ghost" onClick={reset} disabled={busy}>استعادة الافتراضي</button>
-            <button className="btn btn-ghost" onClick={save} disabled={busy}>حفظ كمسودة</button>
-            <button className="btn" onClick={publish} disabled={busy}>نشر</button>
-          </div>
+          <>
+            <Button variant="ghost" icon="refresh" onClick={reset} disabled={busy}>
+              استعادة الافتراضي
+            </Button>
+            <Button variant="ghost" icon="file" onClick={save} disabled={busy}>
+              حفظ كمسودة
+            </Button>
+            <Button icon="check" onClick={publish} disabled={busy}>
+              نشر
+            </Button>
+          </>
         )}
-      </div>
+      </PageHeader>
 
-      {error && <div className="alert alert-error">{error}</div>}
-      {notice && <div className="alert alert-ok">{notice}</div>}
+      <ErrorNote message={error} />
+      <SuccessNote message={notice} />
       {problems.length > 0 && (
-        <div className="alert alert-error">
-          <strong>تحقق من التباين قبل النشر:</strong>
-          <ul style={{ margin: "8px 20px 0" }}>
-            {problems.map((problem, index) => (
-              <li key={index}>{COLOR_LABELS[problem.field.replace("colors.", "")] ?? problem.field}: {problem.message}</li>
-            ))}
-          </ul>
+        <div className="alert alert-warning">
+          <Icon name="warning" />
+          <span>
+            <strong>تحقق من التباين قبل النشر:</strong>
+            <ul style={{ margin: "6px 0 0", paddingInlineStart: 20 }}>
+              {problems.map((problem, index) => (
+                <li key={index}>
+                  {COLOR_LABELS[problem.field.replace("colors.", "")] ?? problem.field}:{" "}
+                  {problem.message}
+                </li>
+              ))}
+            </ul>
+          </span>
         </div>
       )}
 
       <div className="grid grid-2">
         <div className="card">
-          <div className="card-title">العلامة</div>
+          <div className="card-title">
+            <span className="inline">
+              <Icon name="tag" size={17} className="muted" />
+              العلامة
+            </span>
+          </div>
           <div className="field">
             <label>اسم المزرعة الظاهر</label>
             <input value={draft.brand_name} onChange={(e) => update({ brand_name: e.target.value })} disabled={readOnly} />
@@ -186,7 +209,13 @@ export default function ThemePage() {
             <input value={draft.brand_tagline} onChange={(e) => update({ brand_tagline: e.target.value })} disabled={readOnly} />
           </div>
 
-          <div className="card-title" style={{ marginTop: 20 }}>الخط والشكل</div>
+          <div className="divider" />
+          <div className="card-title">
+            <span className="inline">
+              <Icon name="blocks" size={17} className="muted" />
+              الخط والشكل
+            </span>
+          </div>
           <div className="row">
             <div className="field">
               <label>نوع الخط</label>
@@ -233,10 +262,15 @@ export default function ThemePage() {
         </div>
 
         <div className="card">
-          <div className="card-title">الألوان</div>
+          <div className="card-title">
+            <span className="inline">
+              <Icon name="palette" size={17} className="muted" />
+              الألوان
+            </span>
+          </div>
           <div className="swatch-row">
             {Object.keys(COLOR_LABELS).map((key) => (
-              <div className="field" key={key} style={{ marginBottom: 8 }}>
+              <div className="field" key={key}>
                 <label>{COLOR_LABELS[key]}</label>
                 <input
                   type="color"
@@ -250,8 +284,14 @@ export default function ThemePage() {
         </div>
       </div>
 
-      <div className="card" style={{ marginTop: 20 }}>
-        <div className="card-title">معاينة حية</div>
+      <div className="card mt-5">
+        <div className="card-title">
+          <span className="inline">
+            <Icon name="eye" size={17} className="muted" />
+            معاينة حية
+          </span>
+          <span className="badge badge-muted">v{draft.tokens.version}</span>
+        </div>
         <div className="preview">
           <div className="preview-head" style={{ background: colors.primary, color: colors.primary_contrast }}>
             {draft.brand_name || "مزرعتي"} — {draft.brand_tagline || "لوحة الإدارة"}
@@ -282,36 +322,34 @@ export default function ThemePage() {
             </div>
           </div>
         </div>
-        <div className="stat-hint" style={{ marginTop: 10 }}>
-          النسخة المنشورة الحالية: v{draft.tokens.version}
+        <div className="stat-hint mt-4">
+          هذه معاينة للمسودة. النسخة المنشورة الحالية التي يراها الجميع هي v{draft.tokens.version}.
         </div>
       </div>
 
-      <div className="card" style={{ marginTop: 16 }}>
-        <div className="card-title">بطاقات لوحة المعلومات</div>
-        <p className="page-sub" style={{ marginBottom: 12 }}>
+      <div className="card mt-4">
+        <div className="card-title">
+          <span className="inline">
+            <Icon name="home" size={17} className="muted" />
+            بطاقات لوحة المعلومات
+          </span>
+        </div>
+        <p className="page-sub mb-4">
           أطفئ ما لا يهم مزرعتك، وحرّك ما يهمها إلى الأعلى. يُحفظ مع بقية الهوية
           البصرية ولا يظهر للجميع قبل النشر.
         </p>
 
-        <div style={{ display: "grid", gap: 6 }}>
+        <div className="stack-sm">
           {widgetRows(draft).map((row, index, all) => {
             const label =
               DASHBOARD_WIDGETS.find((widget) => widget.key === row.key)?.label ?? row.key;
             return (
               <div
                 key={row.key}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "8px 12px",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 10,
-                  opacity: row.visible ? 1 : 0.55,
-                }}
+                className="alert-row"
+                style={{ alignItems: "center", opacity: row.visible ? 1 : 0.55 }}
               >
-                <label style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, margin: 0 }}>
+                <label className="field-inline" style={{ flex: 1, marginBottom: 0 }}>
                   <input
                     type="checkbox"
                     checked={row.visible}
@@ -322,32 +360,40 @@ export default function ThemePage() {
                       update({ dashboard_widgets: next });
                     }}
                   />
-                  <span style={{ fontWeight: 600 }}>{label}</span>
+                  <span className="strong" style={{ color: "var(--color-text)" }}>
+                    {label}
+                  </span>
                 </label>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  disabled={index === 0 || !can("theme.edit")}
-                  onClick={() => {
-                    const next = [...all];
-                    [next[index - 1], next[index]] = [next[index], next[index - 1]];
-                    update({ dashboard_widgets: next });
-                  }}
-                >
-                  ▲
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  disabled={index === all.length - 1 || !can("theme.edit")}
-                  onClick={() => {
-                    const next = [...all];
-                    [next[index], next[index + 1]] = [next[index + 1], next[index]];
-                    update({ dashboard_widgets: next });
-                  }}
-                >
-                  ▼
-                </button>
+                <span className="cell-actions-group">
+                  <button
+                    type="button"
+                    className="icon-btn bordered"
+                    title="أعلى"
+                    aria-label="نقل لأعلى"
+                    disabled={index === 0 || !can("theme.edit")}
+                    onClick={() => {
+                      const next = [...all];
+                      [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                      update({ dashboard_widgets: next });
+                    }}
+                  >
+                    <Icon name="chevronUp" size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn bordered"
+                    title="أسفل"
+                    aria-label="نقل لأسفل"
+                    disabled={index === all.length - 1 || !can("theme.edit")}
+                    onClick={() => {
+                      const next = [...all];
+                      [next[index], next[index + 1]] = [next[index + 1], next[index]];
+                      update({ dashboard_widgets: next });
+                    }}
+                  >
+                    <Icon name="chevronDown" size={15} />
+                  </button>
+                </span>
               </div>
             );
           })}

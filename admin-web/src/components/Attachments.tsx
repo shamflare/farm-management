@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { api, formatBytes, formatDate, readFileAsDataUri } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
+import Icon from "@/components/Icon";
+import { Button, ErrorNote, TableMessage } from "@/components/ui";
 
 type Attachment = {
   id: string;
@@ -119,15 +121,18 @@ export default function Attachments({
   return (
     <div className="card">
       <div className="card-title">
-        <span>{title}</span>
+        <span className="inline">
+          <Icon name="image" size={17} className="muted" />
+          {title}
+        </span>
         <span className="badge badge-muted">{rows.length}</span>
       </div>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      <ErrorNote message={error} />
 
       {can("attachments.create") && (
-        <div className="row" style={{ marginBottom: 12 }}>
-          <div className="field" style={{ margin: 0 }}>
+        <div className="row mb-5">
+          <div className="field">
             <label>النوع</label>
             <select value={kind} onChange={(e) => setKind(e.target.value)}>
               {KINDS.filter((k) => allowPhoto || k !== "photo").map((k) => (
@@ -135,11 +140,11 @@ export default function Attachments({
               ))}
             </select>
           </div>
-          <div className="field" style={{ margin: 0, flex: "2 1 200px" }}>
+          <div className="field row-wide">
             <label>ملاحظة</label>
             <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="اختياري" />
           </div>
-          <div className="field" style={{ margin: 0 }}>
+          <div className="field">
             <label>الملف (صورة أو PDF، حتى 3 ميغابايت)</label>
             <input
               ref={picker}
@@ -155,52 +160,88 @@ export default function Attachments({
         </div>
       )}
 
-      {busy && <div className="empty">جارٍ الرفع…</div>}
+      {busy && (
+        <div className="empty inline" style={{ justifyContent: "center", padding: "var(--s5)" }}>
+          <span className="spinner" />
+          <span>جارٍ الرفع…</span>
+        </div>
+      )}
 
-      <table>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.id}>
-              <td>
-                <button className="btn btn-ghost btn-sm" onClick={() => open(row)}>
-                  {row.is_image ? "🖼️" : "📄"} {row.name}
-                </button>
-                {row.is_primary && <span className="badge" style={{ marginRight: 6 }}>الصورة الأساسية</span>}
-              </td>
-              <td className="muted">{KIND_LABEL[row.kind] ?? row.kind}</td>
-              <td className="num muted">{formatBytes(row.size)}</td>
-              <td className="muted">{formatDate(row.created_at)}</td>
-              <td style={{ textAlign: "left", whiteSpace: "nowrap" }}>
-                {row.is_image && !row.is_primary && can("attachments.create") && (
-                  <button className="btn btn-ghost btn-sm" onClick={() => makePrimary(row)}>
-                    اجعلها الأساسية
-                  </button>
-                )}{" "}
-                {can("attachments.delete") && (
-                  <button className="btn btn-ghost btn-sm" onClick={() => remove(row)}>حذف</button>
-                )}
-              </td>
-            </tr>
-          ))}
-          {rows.length === 0 && (
-            <tr>
-              <td colSpan={5} className="empty">لا توجد مرفقات</td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+      <div className="table-wrap">
+        <table>
+          <tbody>
+            <TableMessage
+              colSpan={5}
+              empty={rows.length === 0}
+              emptyTitle="لا توجد مرفقات"
+              emptyText="الملفات تُحفظ داخل قاعدة البيانات لا على القرص، فتسافر مع النسخة الاحتياطية ولا تختفي مع النشر."
+            />
+            {rows.map((row) => (
+              <tr key={row.id}>
+                <td>
+                  <span className="inline" style={{ gap: "var(--s2)" }}>
+                    <button className="link inline" onClick={() => open(row)} style={{ border: "none", background: "none", cursor: "pointer", padding: 0 }}>
+                      <Icon name={row.is_image ? "image" : "file"} size={16} />
+                      {row.name}
+                    </button>
+                    {row.is_primary && <span className="badge">الصورة الأساسية</span>}
+                  </span>
+                </td>
+                <td className="muted">{KIND_LABEL[row.kind] ?? row.kind}</td>
+                <td className="num muted">{formatBytes(row.size)}</td>
+                <td className="muted num">{formatDate(row.created_at)}</td>
+                <td className="cell-actions">
+                  <span className="cell-actions-group">
+                    {row.is_image && !row.is_primary && can("attachments.create") && (
+                      <Button size="sm" variant="ghost" icon="check" onClick={() => makePrimary(row)}>
+                        اجعلها الأساسية
+                      </Button>
+                    )}
+                    {can("attachments.delete") && (
+                      <button
+                        className="icon-btn"
+                        title="حذف المرفق"
+                        aria-label="حذف المرفق"
+                        style={{ color: "var(--color-danger)" }}
+                        onClick={() => remove(row)}
+                      >
+                        <Icon name="trash" size={16} />
+                      </button>
+                    )}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {preview && (
         <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setPreview(null)}>
           <div className="modal" style={{ maxWidth: 760 }}>
             <div className="modal-title">{preview.name}</div>
             {preview.isImage ? (
-              <img src={preview.data} alt={preview.name} style={{ maxWidth: "100%", borderRadius: 8 }} />
+              <img
+                src={preview.data}
+                alt={preview.name}
+                style={{ maxWidth: "100%", borderRadius: "var(--radius-sm)" }}
+              />
             ) : (
-              <iframe src={preview.data} style={{ width: "100%", height: "60vh", border: 0 }} />
+              <iframe
+                src={preview.data}
+                title={preview.name}
+                style={{
+                  width: "100%",
+                  height: "60vh",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "var(--radius-sm)",
+                }}
+              />
             )}
             <div className="modal-actions">
-              <button className="btn btn-ghost" onClick={() => setPreview(null)}>إغلاق</button>
+              <Button variant="ghost" icon="close" onClick={() => setPreview(null)}>
+                إغلاق
+              </Button>
             </div>
           </div>
         </div>

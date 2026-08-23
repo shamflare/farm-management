@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { login } from "@/lib/api";
+import Icon from "@/components/Icon";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,15 +29,25 @@ export default function LoginPage() {
   return (
     <div className="login-page">
       <form className="login-card" onSubmit={submit}>
-        <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <div className="brand-mark" style={{ margin: "0 auto 14px", width: 56, height: 56, fontSize: "1.6rem" }}>
-            🐑
+        <div style={{ textAlign: "center", marginBottom: "var(--s6)" }}>
+          <div
+            className="brand-mark"
+            style={{ margin: "0 auto var(--s4)", width: 56, height: 56 }}
+          >
+            <Icon name="sheep" size={30} />
           </div>
-          <h1 style={{ fontSize: "1.35rem", fontWeight: 700 }}>نظام إدارة المزرعة</h1>
-          <p className="page-sub">سجّل الدخول للمتابعة</p>
+          <h1 style={{ fontSize: "1.3rem" }}>نظام إدارة المزرعة</h1>
+          <p className="page-sub" style={{ margin: "4px auto 0" }}>
+            سجّل الدخول للمتابعة
+          </p>
         </div>
 
-        {error && <div className="alert alert-error">{error}</div>}
+        {error && (
+          <div className="alert alert-error" role="alert">
+            <Icon name="warning" />
+            <span>{error}</span>
+          </div>
+        )}
 
         <div className="field">
           <label htmlFor="username">اسم المستخدم</label>
@@ -45,6 +56,7 @@ export default function LoginPage() {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             autoComplete="username"
+            autoFocus
             required
           />
         </div>
@@ -61,7 +73,8 @@ export default function LoginPage() {
           />
         </div>
 
-        <button className="btn" type="submit" disabled={busy} style={{ width: "100%", marginTop: 6 }}>
+        <button className="btn btn-block mt-4" type="submit" disabled={busy}>
+          {busy ? <span className="spinner" /> : <Icon name="lock" />}
           {busy ? "جارٍ الدخول…" : "دخول"}
         </button>
       </form>

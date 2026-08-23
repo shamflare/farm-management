@@ -1,19 +1,34 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, download, money } from "@/lib/api";
+import { api, download, formatNumber, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
+import Icon from "@/components/Icon";
+import {
+  EmptyState,
+  ErrorNote,
+  ExportButton,
+  PageHeader,
+  PrintButton,
+  Stat,
+  TableCard,
+  TableMessage,
+  TableSkeleton,
+  Tabs,
+} from "@/components/ui";
 
 const TABS = [
-  { key: "branches", label: "مقارنة الفروع" },
-  { key: "trial", label: "ميزان المراجعة" },
-  { key: "pl", label: "الأرباح والخسائر" },
-  { key: "cash", label: "التدفق النقدي" },
-  { key: "categories", label: "المصروفات حسب البند" },
-  { key: "animals", label: "تقرير القطيع" },
-];
+  { key: "branches", label: "مقارنة الفروع", icon: "sheep" },
+  { key: "trial", label: "ميزان المراجعة", icon: "list" },
+  { key: "pl", label: "الأرباح والخسائر", icon: "trendUp" },
+  { key: "cash", label: "التدفق النقدي", icon: "wallet" },
+  { key: "categories", label: "المصروفات حسب البند", icon: "chart" },
+  { key: "animals", label: "تقرير القطيع", icon: "sheep" },
+] as const;
 
-// Which export answers each tab. The herd tab has its own file.
+type Tab = (typeof TABS)[number]["key"];
+
+// أي تصدير يجيب عن كل تبويب. تبويب القطيع له ملفه الخاص.
 const EXPORT_FOR: Record<string, string> = {
   branches: "branches",
   trial: "trial-balance",
@@ -26,17 +41,19 @@ const PERIODS = [
   { key: "month", label: "هذا الشهر" },
   { key: "year", label: "هذه السنة" },
   { key: "all", label: "كل الفترة" },
-];
+] as const;
+
+type Period = (typeof PERIODS)[number]["key"];
 
 export default function ReportsPage() {
   const { can, currency, me } = useApp();
-  const [tab, setTab] = useState("branches");
-  const [period, setPeriod] = useState("all");
+  const [tab, setTab] = useState<Tab>("branches");
+  const [period, setPeriod] = useState<Period>("all");
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const paths: Record<string, string> = {
+    const paths: Record<Tab, string> = {
       branches: `/reports/branches/?period=${period}`,
       trial: "/reports/trial-balance/",
       pl: `/reports/profit-loss/?period=${period}`,
@@ -48,122 +65,130 @@ export default function ReportsPage() {
     api.get(paths[tab]).then(setData).catch((err) => setError(err.message));
   }, [tab, period]);
 
+  const periodMatters = tab !== "trial" && tab !== "animals";
+
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1 className="page-title" data-farm={me?.farm?.name ?? ""}>التقارير</h1>
-          <p className="page-sub">مشتقة بالكامل من قيود الدفتر المرحّلة</p>
-        </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() => window.print()}
-            title="الطباعة تنتج PDF من متصفحك، بتنسيق عربي سليم"
-          >
-            🖨 طباعة / PDF
-          </button>
-          {EXPORT_FOR[tab] && can("reports.export") && (
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() =>
-                download(`/export/${EXPORT_FOR[tab]}/?period=${period}`).catch((err) =>
-                  setError(err.message)
-                )
-              }
-            >
-              ⬇ تصدير CSV
-            </button>
-          )}
-          {tab !== "trial" && tab !== "animals" && (
-          <div className="tabs" style={{ margin: 0 }}>
-            {PERIODS.map((p) => (
-              <button key={p.key} className={`tab ${period === p.key ? "active" : ""}`} onClick={() => setPeriod(p.key)}>
-                {p.label}
-              </button>
-            ))}
-          </div>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title="التقارير"
+        subtitle="مشتقة بالكامل من قيود الدفتر المرحّلة — لا رقم منها مُدخَل يدويًا"
+        farm={me?.farm?.name}
+      >
+        <PrintButton label="طباعة / PDF" />
+        {EXPORT_FOR[tab] && can("reports.export") && (
+          <ExportButton
+            onClick={() =>
+              download(`/export/${EXPORT_FOR[tab]}/?period=${period}`).catch((err) =>
+                setError(err.message)
+              )
+            }
+          />
+        )}
+        {periodMatters && <Tabs value={period} onChange={setPeriod} options={PERIODS as any} />}
+      </PageHeader>
 
-      <div className="tabs">
-        {TABS.map((t) => (
-          <button key={t.key} className={`tab ${tab === t.key ? "active" : ""}`} onClick={() => setTab(t.key)}>
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Tabs value={tab} onChange={setTab} options={TABS as any} />
 
-      {error && <div className="alert alert-error">{error}</div>}
-      {!data && <div className="empty">جارٍ التحميل…</div>}
+      <ErrorNote message={error} />
+
+      {!data && !error && (
+        <div className="card">
+          <TableSkeleton rows={6} />
+        </div>
+      )}
 
       {data && tab === "branches" && (
         <>
-          <div className="grid grid-2" style={{ marginBottom: 16 }}>
+          <div className="grid grid-2 mb-4">
             {data.branches.map((column: any) => (
               <div className="card" key={column.code}>
-                <div className="card-title">{column.name}</div>
-                <div className={`stat-value num ${Number(column.net_profit) >= 0 ? "positive" : "negative"}`}>
+                <div className="card-title">
+                  <span className="inline">
+                    <Icon name="sheep" size={17} className="muted" />
+                    {column.name}
+                  </span>
+                  <span
+                    className={`badge ${
+                      Number(column.net_profit) >= 0 ? "badge-success" : "badge-danger"
+                    }`}
+                  >
+                    {Number(column.net_profit) >= 0 ? "رابح" : "خاسر"}
+                  </span>
+                </div>
+                <div
+                  className={`stat-value num ${
+                    Number(column.net_profit) >= 0 ? "positive" : "negative"
+                  }`}
+                >
                   {money(column.net_profit, currency)}
                 </div>
-                <div className="stat-hint" style={{ marginBottom: 12 }}>
-                  صافي الربح للفترة
-                </div>
-                <table>
-                  <tbody>
-                    <tr>
-                      <td>الدخل</td>
-                      <td className="num positive" style={{ textAlign: "left", fontWeight: 600 }}>
-                        {money(column.total_income, currency)}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td>المصروفات</td>
-                      <td className="num negative" style={{ textAlign: "left", fontWeight: 600 }}>
-                        {money(column.total_expenses, currency)}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td>عدد الحيوانات</td>
-                      <td className="num" style={{ textAlign: "left" }}>{column.animals_on_farm}</td>
-                    </tr>
-                    <tr>
-                      <td>قيمة العلف في المستودع</td>
-                      <td className="num" style={{ textAlign: "left" }}>{money(column.stock_value, currency)}</td>
-                    </tr>
-                    {column.milk && Number(column.milk.liters_produced) > 0 && (
+                <div className="stat-hint mb-4">صافي الربح للفترة</div>
+
+                <div className="table-wrap">
+                  <table>
+                    <tbody>
                       <tr>
-                        <td>الحليب المنتج</td>
-                        <td className="num" style={{ textAlign: "left" }}>
-                          {Number(column.milk.liters_produced).toLocaleString("en-US")} لتر
+                        <td>الدخل</td>
+                        <td className="num positive strong text-end">
+                          {money(column.total_income, currency)}
                         </td>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
+                      <tr>
+                        <td>المصروفات</td>
+                        <td className="num negative strong text-end">
+                          {money(column.total_expenses, currency)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>عدد الحيوانات</td>
+                        <td className="num text-end">{formatNumber(column.animals_on_farm)}</td>
+                      </tr>
+                      <tr>
+                        <td>قيمة العلف في المستودع</td>
+                        <td className="num text-end">{money(column.stock_value, currency)}</td>
+                      </tr>
+                      {column.milk && Number(column.milk.liters_produced) > 0 && (
+                        <tr>
+                          <td>الحليب المنتج</td>
+                          <td className="num text-end">
+                            {formatNumber(column.milk.liters_produced, 1)} لتر
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
 
-                <div className="card-title" style={{ marginTop: 16 }}>بنود الدخل</div>
+                <div className="section-title mt-5">بنود الدخل</div>
                 <SimpleTable rows={column.income} currency={currency} />
-                <div className="card-title" style={{ marginTop: 16 }}>بنود المصروف</div>
+                <div className="section-title mt-5">بنود المصروف</div>
                 <SimpleTable rows={column.expenses} currency={currency} />
               </div>
             ))}
           </div>
 
           <div className="grid grid-3">
-            <div className="card">
-              <div className="stat-label">دخل المزرعة كاملة</div>
-              <div className="stat-value num positive">{money(data.farm_total.total_income, currency)}</div>
-            </div>
-            <div className="card">
-              <div className="stat-label">مصروفات المزرعة كاملة</div>
-              <div className="stat-value num negative">{money(data.farm_total.total_expenses, currency)}</div>
-            </div>
-            <div className="card">
-              <div className="stat-label">التكاليف التأسيسية (خارج الأرباح)</div>
-              <div className="stat-value num">{money(data.founding_total, currency)}</div>
-            </div>
+            <Stat
+              label="دخل المزرعة كاملة"
+              value={money(data.farm_total.total_income, currency)}
+              valueTone="positive"
+              icon="trendUp"
+              tone="success"
+            />
+            <Stat
+              label="مصروفات المزرعة كاملة"
+              value={money(data.farm_total.total_expenses, currency)}
+              valueTone="negative"
+              icon="trendDown"
+              tone="danger"
+            />
+            <Stat
+              label="التكاليف التأسيسية"
+              value={money(data.founding_total, currency)}
+              hint="خارج حساب الأرباح"
+              icon="building"
+              tone="accent"
+            />
           </div>
         </>
       )}
@@ -171,16 +196,34 @@ export default function ReportsPage() {
       {data && tab === "trial" && (
         <>
           <div className={`alert ${data.balanced ? "alert-ok" : "alert-error"}`}>
-            {data.balanced
-              ? `الميزان متوازن: ${money(data.total_debit, currency)} مدين = ${money(data.total_credit, currency)} دائن`
-              : `الميزان غير متوازن بفارق ${money(data.difference, currency)}`}
+            <Icon name={data.balanced ? "check" : "warning"} />
+            <span>
+              {data.balanced
+                ? `الميزان متوازن: ${money(data.total_debit, currency)} مدين = ${money(
+                    data.total_credit,
+                    currency
+                  )} دائن`
+                : `الميزان غير متوازن بفارق ${money(data.difference, currency)}`}
+            </span>
           </div>
           <div className="table-wrap">
             <table>
               <thead>
-                <tr><th>الرمز</th><th>الحساب</th><th>النوع</th><th>مدين</th><th>دائن</th><th>الرصيد</th></tr>
+                <tr>
+                  <th>الرمز</th>
+                  <th>الحساب</th>
+                  <th>النوع</th>
+                  <th>مدين</th>
+                  <th>دائن</th>
+                  <th>الرصيد</th>
+                </tr>
               </thead>
               <tbody>
+                <TableMessage
+                  colSpan={6}
+                  empty={data.rows.length === 0}
+                  emptyTitle="لا توجد حسابات ذات حركة"
+                />
                 {data.rows.map((row: any) => (
                   <tr key={row.code}>
                     <td className="num muted">{row.code}</td>
@@ -188,10 +231,18 @@ export default function ReportsPage() {
                     <td className="muted">{ACCOUNT_TYPE[row.type] ?? row.type}</td>
                     <td className="num">{money(row.debit, currency)}</td>
                     <td className="num">{money(row.credit, currency)}</td>
-                    <td className="num" style={{ fontWeight: 600 }}>{money(row.balance, currency)}</td>
+                    <td className="num strong">{money(row.balance, currency)}</td>
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan={3}>الإجمالي</td>
+                  <td className="num">{money(data.total_debit, currency)}</td>
+                  <td className="num">{money(data.total_credit, currency)}</td>
+                  <td />
+                </tr>
+              </tfoot>
             </table>
           </div>
         </>
@@ -200,40 +251,74 @@ export default function ReportsPage() {
       {data && tab === "pl" && (
         <div className="grid grid-2">
           <div className="card">
-            <div className="card-title">الإيرادات · {money(data.total_income, currency)}</div>
+            <div className="card-title">
+              <span>الإيرادات</span>
+              <span className="badge badge-success">{money(data.total_income, currency)}</span>
+            </div>
             <SimpleTable rows={data.income} currency={currency} />
           </div>
           <div className="card">
-            <div className="card-title">المصروفات · {money(data.total_expenses, currency)}</div>
+            <div className="card-title">
+              <span>المصروفات</span>
+              <span className="badge badge-danger">{money(data.total_expenses, currency)}</span>
+            </div>
             <SimpleTable rows={data.expenses} currency={currency} />
           </div>
-          <div className="card" style={{ gridColumn: "1 / -1" }}>
-            <div className="stat-label">صافي الربح</div>
-            <div className={`stat-value num ${data.net_profit >= 0 ? "positive" : "negative"}`}>
-              {money(data.net_profit, currency)}
-            </div>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <Stat
+              label="صافي الربح"
+              value={money(data.net_profit, currency)}
+              valueTone={data.net_profit >= 0 ? "positive" : "negative"}
+              icon={data.net_profit >= 0 ? "trendUp" : "trendDown"}
+              tone={data.net_profit >= 0 ? "success" : "danger"}
+              hint="الإيرادات ناقص المصروفات — التكاليف التأسيسية غير داخلة"
+            />
           </div>
         </div>
       )}
 
       {data && tab === "cash" && (
         <>
-          <div className="grid grid-4" style={{ marginBottom: 16 }}>
-            <div className="card"><div className="stat-label">داخل</div><div className="stat-value num positive">{money(data.total_in, currency)}</div></div>
-            <div className="card"><div className="stat-label">خارج</div><div className="stat-value num negative">{money(data.total_out, currency)}</div></div>
-            <div className="card"><div className="stat-label">الصافي</div><div className="stat-value num">{money(data.net, currency)}</div></div>
-            <div className="card"><div className="stat-label">النقد الحالي</div><div className="stat-value num">{money(data.closing_cash, currency)}</div></div>
+          <div className="grid grid-4 mb-4">
+            <Stat
+              label="داخل"
+              value={money(data.total_in, currency)}
+              valueTone="positive"
+              icon="arrowEnd"
+              tone="success"
+            />
+            <Stat
+              label="خارج"
+              value={money(data.total_out, currency)}
+              valueTone="negative"
+              icon="arrowStart"
+              tone="danger"
+            />
+            <Stat label="الصافي" value={money(data.net, currency)} icon="swap" />
+            <Stat label="النقد الحالي" value={money(data.closing_cash, currency)} icon="wallet" />
           </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>نوع العملية</th><th>داخل</th><th>خارج</th><th>عدد</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>نوع العملية</th>
+                  <th>داخل</th>
+                  <th>خارج</th>
+                  <th>عدد</th>
+                </tr>
+              </thead>
               <tbody>
+                <TableMessage
+                  colSpan={4}
+                  empty={data.by_kind.length === 0}
+                  emptyTitle="لا حركة نقدية في هذه الفترة"
+                />
                 {data.by_kind.map((row: any) => (
                   <tr key={row.kind}>
                     <td>{KIND_LABEL[row.kind] ?? row.kind}</td>
                     <td className="num positive">{money(row.in, currency)}</td>
                     <td className="num negative">{money(row.out, currency)}</td>
-                    <td className="num">{row.count}</td>
+                    <td className="num">{formatNumber(row.count)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -244,28 +329,50 @@ export default function ReportsPage() {
 
       {data && tab === "categories" && (
         <div className="card">
-          <div className="card-title">الإجمالي · {money(data.total, currency)}</div>
-          {data.items.map((item: any) => (
-            <div key={item.account_id} style={{ marginBottom: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                <span>{item.name}</span>
-                <span className="num" style={{ fontWeight: 600 }}>
-                  {money(item.amount, currency)} · {item.share.toFixed(1)}%
-                </span>
-              </div>
-              <div style={{ height: 8, background: "var(--color-border)", borderRadius: 999 }}>
-                <div
-                  style={{
-                    width: `${item.share}%`,
-                    height: "100%",
-                    background: "var(--color-primary)",
-                    borderRadius: 999,
-                  }}
-                />
-              </div>
+          <div className="card-title">
+            <span>المصروفات حسب البند</span>
+            <span className="badge badge-danger">{money(data.total, currency)}</span>
+          </div>
+          {data.items.length === 0 ? (
+            <EmptyState
+              icon="chart"
+              title="لا توجد مصروفات في هذه الفترة"
+              text="سجّل مصروفًا من شاشة الحركات المالية ليظهر هنا موزّعًا على بنوده."
+            />
+          ) : (
+            <div className="stack">
+              {data.items.map((item: any) => (
+                <div key={item.account_id}>
+                  <div className="between" style={{ marginBottom: 5 }}>
+                    <span>{item.name}</span>
+                    <span className="num strong">
+                      {money(item.amount, currency)}{" "}
+                      <span className="muted">· {item.share.toFixed(1)}%</span>
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      height: 8,
+                      background: "var(--surface-sunken)",
+                      border: "1px solid var(--color-border)",
+                      borderRadius: "var(--radius-pill)",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${Math.min(100, Math.max(1, item.share))}%`,
+                        height: "100%",
+                        background: "var(--color-primary)",
+                        borderRadius: "var(--radius-pill)",
+                        transition: "width 0.4s var(--ease)",
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-          {data.items.length === 0 && <div className="empty">لا توجد بيانات</div>}
+          )}
         </div>
       )}
 
@@ -274,35 +381,49 @@ export default function ReportsPage() {
           <GroupCard title="حسب النوع" rows={data.by_type} />
           <GroupCard title="حسب السلالة" rows={data.by_breed} />
           <GroupCard title="حسب الحالة" rows={data.by_status} />
-          <div className="card">
-            <div className="card-title">حسب العمر</div>
+
+          <TableCard title="حسب العمر">
             <table>
               <tbody>
                 {Object.entries(data.by_age).map(([key, value]) => (
                   <tr key={key}>
                     <td>{AGE_LABEL[key] ?? key}</td>
-                    <td className="num" style={{ textAlign: "left", fontWeight: 600 }}>{String(value)}</td>
+                    <td className="num strong text-end">{formatNumber(value as number)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
-          <div className="card" style={{ gridColumn: "span 2" }}>
-            <div className="card-title">أكثر الإناث إنتاجًا</div>
-            <table>
-              <thead><tr><th>الرقم</th><th>الاسم</th><th>الولادات</th><th>المواليد</th></tr></thead>
-              <tbody>
-                {data.top_mothers.map((row: any) => (
-                  <tr key={row.animal_id}>
-                    <td style={{ fontWeight: 600 }}>{row.tag}</td>
-                    <td>{row.name || "—"}</td>
-                    <td className="num">{row.births}</td>
-                    <td className="num">{row.offspring}</td>
+          </TableCard>
+
+          <div style={{ gridColumn: "span 2" }}>
+            <TableCard title="أكثر الإناث إنتاجًا">
+              <table>
+                <thead>
+                  <tr>
+                    <th>الرقم</th>
+                    <th>الاسم</th>
+                    <th>الولادات</th>
+                    <th>المواليد</th>
                   </tr>
-                ))}
-                {data.top_mothers.length === 0 && <tr><td colSpan={4} className="empty">لا توجد ولادات مسجلة</td></tr>}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  <TableMessage
+                    colSpan={4}
+                    empty={data.top_mothers.length === 0}
+                    emptyTitle="لا توجد ولادات مسجلة"
+                    emptyText="سجّل ولادة من صفحة الحيوان لتظهر أمهات القطيع مرتّبات هنا."
+                  />
+                  {data.top_mothers.map((row: any) => (
+                    <tr key={row.animal_id}>
+                      <td className="strong num">{row.tag}</td>
+                      <td>{row.name || "—"}</td>
+                      <td className="num">{formatNumber(row.births)}</td>
+                      <td className="num">{formatNumber(row.offspring)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </TableCard>
           </div>
         </div>
       )}
@@ -341,35 +462,40 @@ const AGE_LABEL: Record<string, string> = {
 };
 
 function SimpleTable({ rows, currency }: { rows: any[]; currency: string }) {
-  if (!rows?.length) return <div className="empty">لا توجد بيانات</div>;
+  if (!rows?.length) {
+    return <p className="muted text-sm">لا توجد بيانات في هذه الفترة</p>;
+  }
   return (
-    <table>
-      <tbody>
-        {rows.map((row) => (
-          <tr key={row.account_id}>
-            <td>{row.name}</td>
-            <td className="num" style={{ textAlign: "left", fontWeight: 600 }}>{money(row.amount, currency)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-function GroupCard({ title, rows }: { title: string; rows: any[] }) {
-  return (
-    <div className="card">
-      <div className="card-title">{title}</div>
+    <div className="table-wrap">
       <table>
         <tbody>
-          {rows?.filter((r) => r.key).map((row) => (
-            <tr key={row.key}>
-              <td>{row.label}</td>
-              <td className="num" style={{ textAlign: "left", fontWeight: 600 }}>{row.count}</td>
+          {rows.map((row) => (
+            <tr key={row.account_id}>
+              <td>{row.name}</td>
+              <td className="num strong text-end">{money(row.amount, currency)}</td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
+  );
+}
+
+function GroupCard({ title, rows }: { title: string; rows: any[] }) {
+  const visible = rows?.filter((row) => row.key) ?? [];
+  return (
+    <TableCard title={title}>
+      <table>
+        <tbody>
+          <TableMessage colSpan={2} empty={visible.length === 0} emptyTitle="لا توجد بيانات" />
+          {visible.map((row) => (
+            <tr key={row.key}>
+              <td>{row.label}</td>
+              <td className="num strong text-end">{formatNumber(row.count)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </TableCard>
   );
 }

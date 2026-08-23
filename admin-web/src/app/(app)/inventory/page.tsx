@@ -3,6 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, download, formatDate, formatNumber, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
+import Icon from "@/components/Icon";
+import {
+  Button,
+  ErrorNote,
+  ExportButton,
+  PageHeader,
+  Stat,
+  TableCard,
+  TableMessage,
+  Tabs,
+} from "@/components/ui";
 
 type Store = {
   id: string;
@@ -60,19 +71,29 @@ const KIND_LABEL: Record<string, string> = {
   count: "جرد",
 };
 
+/** لون الحركة يقول أثرها: الصرف مصروف، والاستلام أصل، والهدر خسارة. */
+const MOVEMENT_TONE: Record<string, string> = {
+  receipt: "badge-success",
+  issue: "badge-info",
+  transfer_in: "badge-muted",
+  transfer_out: "badge-muted",
+  waste: "badge-danger",
+  count: "badge-warning",
+};
+
 const FORMS = [
-  { key: "receive", label: "استلام علف", permission: "inventory.create" },
-  { key: "issue", label: "صرف للحيوانات", permission: "inventory.create" },
-  { key: "transfer", label: "تحويل بين المستودعين", permission: "inventory.create" },
-  { key: "count", label: "جرد", permission: "inventory.edit" },
-  { key: "waste", label: "هدر أو تلف", permission: "inventory.edit" },
-  { key: "setup", label: "الأصناف والمستودعات", permission: "inventory.create" },
-];
+  { key: "receive", label: "استلام علف", icon: "download", permission: "inventory.create" },
+  { key: "issue", label: "صرف للحيوانات", icon: "sheep", permission: "inventory.create" },
+  { key: "transfer", label: "تحويل بين المستودعين", icon: "swap", permission: "inventory.create" },
+  { key: "count", label: "جرد", icon: "scale", permission: "inventory.edit" },
+  { key: "waste", label: "هدر أو تلف", icon: "trash", permission: "inventory.edit" },
+  { key: "setup", label: "الأصناف والمستودعات", icon: "settings", permission: "inventory.create" },
+] as const;
 
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function InventoryPage() {
-  const { can, currency } = useApp();
+  const { can, currency, me } = useApp();
   const [balances, setBalances] = useState<StoreBalance[]>([]);
   const [totalValue, setTotalValue] = useState("0");
   const [stores, setStores] = useState<Store[]>([]);
@@ -146,42 +167,45 @@ export default function InventoryPage() {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">مستودعات الأعلاف</h1>
-          <p className="page-sub">
-            مستودع لكل فرع · العلف أصل حتى يُصرف، وعندها يصير تكلفة على فرعه
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-          {can("reports.export") && (
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => download("/export/stock/").catch((err) => setError(err.message))}
-            >
-              ⬇ تصدير CSV
-            </button>
-          )}
-          <div style={{ textAlign: "left" }}>
-            <div className="stat-label">قيمة المخزون</div>
-            <div className="stat-value num">{money(totalValue, currency)}</div>
-          </div>
-        </div>
+      <PageHeader
+        title="مستودعات الأعلاف"
+        subtitle="مستودع لكل فرع · العلف أصل حتى يُصرف، وعندها يصير تكلفة على فرعه"
+        farm={me?.farm?.name}
+      >
+        {can("reports.export") && (
+          <ExportButton
+            onClick={() => download("/export/stock/").catch((err) => setError(err.message))}
+          />
+        )}
+      </PageHeader>
+
+      <ErrorNote message={error} />
+
+      <div className="grid grid-4 mb-4">
+        <Stat
+          label="قيمة المخزون كاملًا"
+          value={money(totalValue, currency)}
+          hint="أصل في الميزانية، لا مصروف"
+          icon="wheat"
+          tone="accent"
+        />
+        <Stat label="عدد المستودعات" value={balances.length} icon="box" />
+        <Stat label="الأصناف المعرّفة" value={items.length} icon="list" />
+        <Stat
+          label="أصناف أوشكت على النفاد"
+          value={lowStock.length}
+          valueTone={lowStock.length ? "negative" : undefined}
+          icon="warning"
+          tone={lowStock.length ? "danger" : "success"}
+          hint={lowStock.length ? "دون حد إعادة الطلب" : "كل الأصناف فوق حد الطلب"}
+        />
       </div>
 
-      {error && <div className="alert alert-error">{error}</div>}
-
-      <div className="tabs">
-        {FORMS.filter((form) => can(form.permission)).map((form) => (
-          <button
-            key={form.key}
-            className={`tab ${openForm === form.key ? "active" : ""}`}
-            onClick={() => setOpenForm(openForm === form.key ? "" : form.key)}
-          >
-            {form.label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        value={openForm}
+        onChange={(key) => setOpenForm(openForm === key ? "" : key)}
+        options={FORMS.filter((form) => can(form.permission))}
+      />
 
       {openForm === "receive" && (
         <ReceiveForm
@@ -208,22 +232,35 @@ export default function InventoryPage() {
       )}
 
       {lowStock.length > 0 && (
-        <div className="alert alert-error">
-          أوشك على النفاد:{" "}
-          {lowStock.map((row) => `${row.name} في ${row.store} (${formatNumber(row.quantity, 2)} ${row.unit})`).join(" · ")}
+        <div className="alert alert-warning">
+          <Icon name="warning" />
+          <span>
+            <strong>أوشك على النفاد:</strong>{" "}
+            {lowStock
+              .map(
+                (row) =>
+                  `${row.name} في ${row.store} (${formatNumber(row.quantity, 2)} ${row.unit})`
+              )
+              .join("  ·  ")}
+          </span>
         </div>
       )}
 
-      {loading && <div className="empty">جارٍ التحميل…</div>}
-
       <div className="grid grid-2">
         {balances.map((row) => (
-          <div className="card" key={row.store.id}>
-            <div className="card-title">
-              {row.store.display_name}
-              {row.store.branch_name && <span className="badge" style={{ marginRight: 8 }}>{row.store.branch_name}</span>}
-            </div>
-            <div className="stat-value num" style={{ marginBottom: 12 }}>{money(row.total_value, currency)}</div>
+          <TableCard
+            key={row.store.id}
+            title={
+              <span className="inline">
+                <Icon name="box" size={17} className="muted" />
+                {row.store.display_name}
+                {row.store.branch_name && (
+                  <span className="badge badge-muted">{row.store.branch_name}</span>
+                )}
+              </span>
+            }
+            action={<span className="badge">{money(row.total_value, currency)}</span>}
+          >
             <table>
               <thead>
                 <tr>
@@ -234,37 +271,47 @@ export default function InventoryPage() {
                 </tr>
               </thead>
               <tbody>
-                {row.items.map((item) => (
-                  <tr key={item.item_id}>
-                    <td>
-                      {item.name}
-                      {item.is_low && <span className="badge badge-warning" style={{ marginRight: 6 }}>منخفض</span>}
-                    </td>
-                    <td className="num">
-                      {formatNumber(item.quantity, 2)} {item.unit}
-                    </td>
-                    <td className="num muted">{money(item.average_cost, currency)}</td>
-                    <td className="num" style={{ fontWeight: 600 }}>{money(item.value, currency)}</td>
-                  </tr>
-                ))}
-                {row.items.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="empty">المستودع فارغ</td>
-                  </tr>
-                )}
+                <TableMessage
+                  colSpan={4}
+                  loading={loading}
+                  empty={row.items.length === 0}
+                  emptyTitle="المستودع فارغ"
+                  emptyText="سجّل استلام علف ليدخل المخزون كأصل."
+                />
+                {!loading &&
+                  row.items.map((item) => (
+                    <tr key={item.item_id}>
+                      <td>
+                        <span className="inline" style={{ gap: "var(--s2)" }}>
+                          {item.name}
+                          {item.is_low && <span className="badge badge-warning">منخفض</span>}
+                        </span>
+                      </td>
+                      <td className="num">
+                        {formatNumber(item.quantity, 2)} {item.unit}
+                      </td>
+                      <td className="num muted">{money(item.average_cost, currency)}</td>
+                      <td className="num strong">{money(item.value, currency)}</td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
-          </div>
+          </TableCard>
         ))}
       </div>
 
-      <div className="page-head" style={{ marginTop: 24 }}>
-        <h2 className="page-title" style={{ fontSize: 18 }}>حركات المستودع</h2>
-        <div className="field" style={{ margin: 0, minWidth: 200 }}>
+      <div className="between mt-5 mb-4">
+        <h2 className="section-title" style={{ marginBottom: 0 }}>
+          <Icon name="history" size={18} className="muted" />
+          حركات المستودع
+        </h2>
+        <div className="field no-print" style={{ marginBottom: 0, width: 220 }}>
           <select value={storeFilter} onChange={(e) => setStoreFilter(e.target.value)}>
             <option value="">كل المستودعات</option>
             {stores.map((store) => (
-              <option key={store.id} value={store.id}>{store.display_name}</option>
+              <option key={store.id} value={store.id}>
+                {store.display_name}
+              </option>
             ))}
           </select>
         </div>
@@ -286,11 +333,17 @@ export default function InventoryPage() {
             </tr>
           </thead>
           <tbody>
+            <TableMessage
+              colSpan={9}
+              empty={movements.length === 0}
+              emptyTitle="لا توجد حركات"
+              emptyText="الاستلام والصرف والتحويل والجرد — كل ما يدخل المستودع أو يخرج منه يظهر هنا."
+            />
             {movements.map((row) => (
               <tr key={row.id}>
-                <td>{formatDate(row.happened_on)}</td>
+                <td className="num">{formatDate(row.happened_on)}</td>
                 <td>
-                  <span className={`badge ${row.kind === "issue" ? "" : "badge-muted"}`}>
+                  <span className={`badge ${MOVEMENT_TONE[row.kind] ?? "badge-muted"}`}>
                     {KIND_LABEL[row.kind] ?? row.kind}
                   </span>
                 </td>
@@ -301,15 +354,12 @@ export default function InventoryPage() {
                   {formatNumber(row.quantity, 2)} {row.unit_name}
                 </td>
                 <td className="num muted">{money(row.unit_cost, currency)}</td>
-                <td className="num">{money(row.total_cost, currency)}</td>
-                <td className="muted">{row.memo || row.supplier_name || "—"}</td>
+                <td className="num strong">{money(row.total_cost, currency)}</td>
+                <td className="muted truncate" style={{ maxWidth: 220 }}>
+                  {row.memo || row.supplier_name || "—"}
+                </td>
               </tr>
             ))}
-            {movements.length === 0 && (
-              <tr>
-                <td colSpan={9} className="empty">لا توجد حركات</td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>
@@ -371,8 +421,7 @@ function ReceiveForm({
 
   return (
     <form
-      className="card"
-      style={{ marginBottom: 16 }}
+      className="card mb-4"
       onSubmit={(e) => {
         e.preventDefault();
         submit({
@@ -383,10 +432,10 @@ function ReceiveForm({
       }}
     >
       <div className="card-title">استلام علف في المستودع</div>
-      <p className="page-sub" style={{ marginBottom: 12 }}>
+      <p className="page-sub mb-4">
         لا يُسجَّل مصروفًا الآن — يدخل المخزون كأصل، ويصير تكلفة يوم يُصرف.
       </p>
-      {error && <div className="alert alert-error">{error}</div>}
+      <ErrorNote message={error} />
       <div className="row">
         <div className="field">
           <label>المستودع</label>
@@ -438,7 +487,11 @@ function ReceiveForm({
           <input value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
         </div>
       </div>
-      <button className="btn" disabled={busy}>{busy ? "جارٍ الحفظ…" : "حفظ الاستلام"}</button>
+      <div className="form-actions">
+        <Button icon="check" busy={busy}>
+          {busy ? "جارٍ الحفظ…" : "حفظ الاستلام"}
+        </Button>
+      </div>
     </form>
   );
 }
@@ -459,18 +512,17 @@ function IssueForm({ stores, items, onDone }: { stores: Store[]; items: Item[]; 
 
   return (
     <form
-      className="card"
-      style={{ marginBottom: 16 }}
+      className="card mb-4"
       onSubmit={(e) => {
         e.preventDefault();
         submit(form);
       }}
     >
       <div className="card-title">صرف علف للحيوانات</div>
-      <p className="page-sub" style={{ marginBottom: 12 }}>
+      <p className="page-sub mb-4">
         التكلفة تُحمَّل على فرع {store?.branch_name || "المستودع"} بمتوسط التكلفة المرجح.
       </p>
-      {error && <div className="alert alert-error">{error}</div>}
+      <ErrorNote message={error} />
       <div className="row">
         <div className="field">
           <label>المستودع</label>
@@ -501,7 +553,11 @@ function IssueForm({ stores, items, onDone }: { stores: Store[]; items: Item[]; 
           <input value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
         </div>
       </div>
-      <button className="btn" disabled={busy}>{busy ? "جارٍ الحفظ…" : "حفظ الصرف"}</button>
+      <div className="form-actions">
+        <Button icon="check" busy={busy}>
+          {busy ? "جارٍ الحفظ…" : "حفظ الصرف"}
+        </Button>
+      </div>
     </form>
   );
 }
@@ -521,18 +577,17 @@ function TransferForm({ stores, items, onDone }: { stores: Store[]; items: Item[
 
   return (
     <form
-      className="card"
-      style={{ marginBottom: 16 }}
+      className="card mb-4"
       onSubmit={(e) => {
         e.preventDefault();
         submit(form);
       }}
     >
       <div className="card-title">تحويل بين المستودعين</div>
-      <p className="page-sub" style={{ marginBottom: 12 }}>
+      <p className="page-sub mb-4">
         القيمة تنتقل مع الكمية، ولا يظهر أي مصروف.
       </p>
-      {error && <div className="alert alert-error">{error}</div>}
+      <ErrorNote message={error} />
       <div className="row">
         <div className="field">
           <label>من مستودع</label>
@@ -571,7 +626,11 @@ function TransferForm({ stores, items, onDone }: { stores: Store[]; items: Item[
           <input value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
         </div>
       </div>
-      <button className="btn" disabled={busy}>{busy ? "جارٍ الحفظ…" : "تنفيذ التحويل"}</button>
+      <div className="form-actions">
+        <Button icon="check" busy={busy}>
+          {busy ? "جارٍ الحفظ…" : "تنفيذ التحويل"}
+        </Button>
+      </div>
     </form>
   );
 }
@@ -590,18 +649,17 @@ function CountForm({ stores, items, onDone }: { stores: Store[]; items: Item[]; 
 
   return (
     <form
-      className="card"
-      style={{ marginBottom: 16 }}
+      className="card mb-4"
       onSubmit={(e) => {
         e.preventDefault();
         submit(form);
       }}
     >
       <div className="card-title">جرد فعلي</div>
-      <p className="page-sub" style={{ marginBottom: 12 }}>
+      <p className="page-sub mb-4">
         اكتب الكمية الموجودة فعلًا؛ الفرق يُسجَّل تلقائيًا كفروقات جرد.
       </p>
-      {error && <div className="alert alert-error">{error}</div>}
+      <ErrorNote message={error} />
       <div className="row">
         <div className="field">
           <label>المستودع</label>
@@ -632,7 +690,11 @@ function CountForm({ stores, items, onDone }: { stores: Store[]; items: Item[]; 
           <input value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
         </div>
       </div>
-      <button className="btn" disabled={busy}>{busy ? "جارٍ الحفظ…" : "حفظ الجرد"}</button>
+      <div className="form-actions">
+        <Button icon="check" busy={busy}>
+          {busy ? "جارٍ الحفظ…" : "حفظ الجرد"}
+        </Button>
+      </div>
     </form>
   );
 }
@@ -652,19 +714,18 @@ function WasteForm({ stores, items, onDone }: { stores: Store[]; items: Item[]; 
 
   return (
     <form
-      className="card"
-      style={{ marginBottom: 16 }}
+      className="card mb-4"
       onSubmit={(e) => {
         e.preventDefault();
         submit(form);
       }}
     >
       <div className="card-title">تسجيل هدر أو تلف</div>
-      <p className="page-sub" style={{ marginBottom: 12 }}>
+      <p className="page-sub mb-4">
         علف فسد أو انسكب أو ضاع. يُقيَّد خسارة على فرع المستودع، لا تكلفة تعليف — فلا
         يبدو أن الحيوانات أكلت أكثر مما أكلت.
       </p>
-      {error && <div className="alert alert-error">{error}</div>}
+      <ErrorNote message={error} />
       <div className="row">
         <div className="field">
           <label>المستودع</label>
@@ -697,12 +758,16 @@ function WasteForm({ stores, items, onDone }: { stores: Store[]; items: Item[]; 
             required
           />
         </div>
-        <div className="field" style={{ flex: "2 1 240px" }}>
+        <div className="field row-wide">
           <label>السبب</label>
           <input value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
         </div>
       </div>
-      <button className="btn" disabled={busy}>{busy ? "جارٍ الحفظ…" : "تسجيل الهدر"}</button>
+      <div className="form-actions">
+        <Button icon="check" busy={busy}>
+          {busy ? "جارٍ الحفظ…" : "تسجيل الهدر"}
+        </Button>
+      </div>
     </form>
   );
 }
@@ -750,7 +815,7 @@ function SetupForms({
   }
 
   return (
-    <div className="grid grid-2" style={{ marginBottom: 16 }}>
+    <div className="grid grid-2 mb-4">
       <form
         className="card"
         onSubmit={(e) => {
@@ -772,7 +837,7 @@ function SetupForms({
           <span>صنف جديد</span>
           <span className="badge badge-muted">{items.length} صنف</span>
         </div>
-        {error && <div className="alert alert-error">{error}</div>}
+        <ErrorNote message={error} />
         <div className="row">
           <div className="field">
             <label>الاسم بالعربية</label>
@@ -822,7 +887,11 @@ function SetupForms({
             />
           </div>
         </div>
-        <button className="btn" disabled={busy}>{busy ? "جارٍ الحفظ…" : "إضافة الصنف"}</button>
+        <div className="form-actions">
+          <Button icon="plus" busy={busy}>
+            {busy ? "جارٍ الحفظ…" : "إضافة الصنف"}
+          </Button>
+        </div>
       </form>
 
       <form
@@ -840,7 +909,7 @@ function SetupForms({
           <span>مستودع جديد</span>
           <span className="badge badge-muted">{stores.length} مستودع</span>
         </div>
-        <p className="page-sub" style={{ marginBottom: 12 }}>
+        <p className="page-sub mb-4">
           كل مستودع يأخذ حسابه الخاص تحت المخزون، وكل ما يُصرف منه يُحمَّل على فرعه.
         </p>
         <div className="row">
@@ -874,7 +943,11 @@ function SetupForms({
             <input value={store.location} onChange={(e) => setStore({ ...store, location: e.target.value })} />
           </div>
         </div>
-        <button className="btn" disabled={busy}>{busy ? "جارٍ الحفظ…" : "إضافة المستودع"}</button>
+        <div className="form-actions">
+          <Button icon="plus" busy={busy}>
+            {busy ? "جارٍ الحفظ…" : "إضافة المستودع"}
+          </Button>
+        </div>
       </form>
     </div>
   );

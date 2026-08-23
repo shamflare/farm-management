@@ -3,6 +3,14 @@
 import { useEffect, useState } from "react";
 import { api, download, formatDateTime, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
+import Icon from "@/components/Icon";
+import {
+  Button,
+  ErrorNote,
+  PageHeader,
+  SuccessNote,
+  TableMessage,
+} from "@/components/ui";
 
 type Rule = {
   id: string;
@@ -93,29 +101,31 @@ export default function ApprovalsAndBackupPage() {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">الاعتماد والنسخ الاحتياطي</h1>
-          <p className="page-sub">
-            ما الذي لا يدخل الحسابات قبل موافقة، وكيف تحتفظ بنسخة من كل شيء
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="الاعتماد والنسخ الاحتياطي"
+        subtitle="ما الذي لا يدخل الحسابات قبل موافقة، وكيف تحتفظ بنسخة من كل شيء"
+        farm={me?.farm?.name}
+      />
 
-      {error && <div className="alert alert-error">{error}</div>}
-      {notice && <div className="alert alert-ok">{notice}</div>}
+      <ErrorNote message={error} />
+      <SuccessNote message={notice} />
 
       {can("finance.view") && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <div className="card-title">قواعد الاعتماد</div>
-          <p className="page-sub" style={{ marginBottom: 12 }}>
+        <div className="card mb-4">
+          <div className="card-title">
+            <span className="inline">
+              <Icon name="shield" size={17} className="muted" />
+              قواعد الاعتماد
+            </span>
+          </div>
+          <p className="page-sub mb-4">
             أي عملية من النوع المحدد بمبلغ يساوي الحد أو يتجاوزه تُسجَّل «بانتظار الاعتماد»
             ولا تدخل الأرصدة حتى يعتمدها صاحب صلاحية.
           </p>
 
           {can("settings.edit") && (
-            <form className="row" onSubmit={addRule} style={{ marginBottom: 12 }}>
-              <div className="field" style={{ margin: 0 }}>
+            <form className="row mb-5" onSubmit={addRule}>
+              <div className="field">
                 <label>نوع العملية</label>
                 <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
                   {KINDS.map((kind) => (
@@ -123,7 +133,7 @@ export default function ApprovalsAndBackupPage() {
                   ))}
                 </select>
               </div>
-              <div className="field" style={{ margin: 0 }}>
+              <div className="field">
                 <label>الحد الذي يستوجب الاعتماد</label>
                 <input
                   type="number"
@@ -134,68 +144,99 @@ export default function ApprovalsAndBackupPage() {
                   required
                 />
               </div>
-              <div className="field" style={{ margin: 0, flex: "2 1 240px" }}>
+              <div className="field row-wide">
                 <label>ملاحظة</label>
                 <input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
               </div>
-              <div style={{ alignSelf: "end" }}>
-                <button className="btn" disabled={busy}>إضافة قاعدة</button>
+              <div style={{ flex: "0 0 auto" }}>
+                <Button icon="plus" busy={busy}>
+                  إضافة قاعدة
+                </Button>
               </div>
             </form>
           )}
 
-          <table>
-            <thead>
-              <tr><th>نوع العملية</th><th>الحد</th><th>الحالة</th><th>ملاحظة</th><th></th></tr>
-            </thead>
-            <tbody>
-              {rules.map((rule) => (
-                <tr key={rule.id}>
-                  <td>{KIND_LABEL[rule.kind] ?? rule.kind}</td>
-                  <td className="num" style={{ fontWeight: 600 }}>{money(rule.min_amount, rule.currency)}</td>
-                  <td>
-                    <span className={`badge ${rule.is_active ? "" : "badge-muted"}`}>
-                      {rule.is_active ? "مفعّلة" : "موقوفة"}
-                    </span>
-                  </td>
-                  <td className="muted">{rule.note || "—"}</td>
-                  <td style={{ textAlign: "left", whiteSpace: "nowrap" }}>
-                    {can("settings.edit") && (
-                      <>
-                        <button className="btn btn-ghost btn-sm" onClick={() => toggle(rule)}>
-                          {rule.is_active ? "إيقاف" : "تفعيل"}
-                        </button>{" "}
-                        <button className="btn btn-ghost btn-sm" onClick={() => remove(rule)}>حذف</button>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {rules.length === 0 && (
+          <div className="table-wrap">
+            <table>
+              <thead>
                 <tr>
-                  <td colSpan={5} className="empty">
-                    لا توجد قواعد — كل العمليات تُرحَّل مباشرة
-                  </td>
+                  <th>نوع العملية</th>
+                  <th>الحد</th>
+                  <th>الحالة</th>
+                  <th>ملاحظة</th>
+                  <th className="cell-actions" />
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                <TableMessage
+                  colSpan={5}
+                  empty={rules.length === 0}
+                  emptyTitle="لا توجد قواعد اعتماد"
+                  emptyText="كل العمليات تُرحَّل مباشرة. أضف قاعدة أعلاه لتوقف ما يتجاوز حدًا معيّنًا حتى يعتمده صاحب صلاحية."
+                />
+                {rules.map((rule) => (
+                  <tr key={rule.id}>
+                    <td>{KIND_LABEL[rule.kind] ?? rule.kind}</td>
+                    <td className="num strong">{money(rule.min_amount, rule.currency)}</td>
+                    <td>
+                      <span className={`badge ${rule.is_active ? "badge-success" : "badge-muted"}`}>
+                        {rule.is_active ? "مفعّلة" : "موقوفة"}
+                      </span>
+                    </td>
+                    <td className="muted">{rule.note || "—"}</td>
+                    <td className="cell-actions">
+                      {can("settings.edit") && (
+                        <span className="cell-actions-group">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            icon={rule.is_active ? "lock" : "check"}
+                            onClick={() => toggle(rule)}
+                          >
+                            {rule.is_active ? "إيقاف" : "تفعيل"}
+                          </Button>
+                          <button
+                            className="icon-btn"
+                            title="حذف القاعدة"
+                            aria-label="حذف القاعدة"
+                            style={{ color: "var(--color-danger)" }}
+                            onClick={() => remove(rule)}
+                          >
+                            <Icon name="trash" size={16} />
+                          </button>
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
       {can("backup.export") && (
         <div className="card">
-          <div className="card-title">النسخ الاحتياطي</div>
-          <p className="page-sub" style={{ marginBottom: 12 }}>
+          <div className="card-title">
+            <span className="inline">
+              <Icon name="download" size={17} className="muted" />
+              النسخ الاحتياطي
+            </span>
+            {summary && <span className="badge">{summary.total_rows} سجل</span>}
+          </div>
+          <p className="page-sub mb-4">
             ملف JSON واحد يحوي بيانات هذه المزرعة كاملة — بلا كلمات مرور. احتفظ به
             خارج الخادم؛ فائدة النسخة أنها تبقى حين لا يبقى النظام.
           </p>
 
           {summary && (
-            <div className="table-wrap" style={{ border: "none", marginBottom: 12 }}>
+            <div className="table-wrap mb-4" style={{ maxHeight: 320, overflowY: "auto" }}>
               <table>
                 <thead>
-                  <tr><th>الجدول</th><th>عدد السجلات</th></tr>
+                  <tr>
+                    <th>الجدول</th>
+                    <th>عدد السجلات</th>
+                  </tr>
                 </thead>
                 <tbody>
                   {Object.entries(summary.row_counts)
@@ -206,23 +247,25 @@ export default function ApprovalsAndBackupPage() {
                         <td className="num">{count}</td>
                       </tr>
                     ))}
-                  <tr>
-                    <td style={{ fontWeight: 700 }}>الإجمالي</td>
-                    <td className="num" style={{ fontWeight: 700 }}>{summary.total_rows}</td>
-                  </tr>
                 </tbody>
+                <tfoot>
+                  <tr>
+                    <td>الإجمالي</td>
+                    <td className="num">{summary.total_rows}</td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           )}
 
-          <button
-            className="btn"
+          <Button
+            icon="download"
             onClick={() =>
               download("/backup/?pretty=1", "backup.json").catch((err) => setError(err.message))
             }
           >
             تنزيل نسخة احتياطية الآن
-          </button>
+          </Button>
         </div>
       )}
     </>

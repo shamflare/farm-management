@@ -3,6 +3,16 @@
 import { useEffect, useState } from "react";
 import { api, download, formatDate, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
+import Icon from "@/components/Icon";
+import {
+  Button,
+  ErrorNote,
+  ExportButton,
+  PageHeader,
+  Stat,
+  TableCard,
+  TableMessage,
+} from "@/components/ui";
 
 type Catalog = { id: string; code: string; display_name: string; type: string };
 type Cost = {
@@ -30,7 +40,7 @@ type Party = { id: string; name: string; kind: string };
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function FoundingCostsPage() {
-  const { can, currency } = useApp();
+  const { can, currency, me } = useApp();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [rows, setRows] = useState<Cost[]>([]);
   const [catalog, setCatalog] = useState<Catalog[]>([]);
@@ -69,33 +79,30 @@ export default function FoundingCostsPage() {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">التكاليف التأسيسية</h1>
-          <p className="page-sub">
-            ما صُرف مرة واحدة لبناء المزرعة · لا يدخل في أرباح الشهر، ويتراكم مع كل إضافة جديدة
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: 10 }}>
-          {can("reports.export") && (
-            <button
-              className="btn btn-ghost"
-              onClick={() =>
-                download("/export/founding-costs/").catch((err) => setError(err.message))
-              }
-            >
-              ⬇ تصدير CSV
-            </button>
-          )}
-          {can("assets.create") && (
-            <button className="btn" onClick={() => setShowForm((v) => !v)}>
-              {showForm ? "إغلاق" : "+ إضافة بند تأسيسي"}
-            </button>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title="التكاليف التأسيسية"
+        subtitle="ما صُرف مرة واحدة لبناء المزرعة · لا يدخل في أرباح الشهر، ويتراكم مع كل إضافة جديدة"
+        farm={me?.farm?.name}
+      >
+        {can("reports.export") && (
+          <ExportButton
+            onClick={() =>
+              download("/export/founding-costs/").catch((err) => setError(err.message))
+            }
+          />
+        )}
+        {can("assets.create") && (
+          <Button
+            icon={showForm ? "close" : "plus"}
+            variant={showForm ? "ghost" : "primary"}
+            onClick={() => setShowForm((v) => !v)}
+          >
+            {showForm ? "إغلاق النموذج" : "بند تأسيسي"}
+          </Button>
+        )}
+      </PageHeader>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      <ErrorNote message={error} />
 
       {showForm && (
         <CostForm
@@ -111,48 +118,40 @@ export default function FoundingCostsPage() {
       )}
 
       {summary && (
-        <div className="grid grid-3" style={{ marginBottom: 16 }}>
-          <div className="card">
-            <div className="stat-label">إجمالي ما صُرف على التأسيس</div>
-            <div className="stat-value num">{money(summary.total, currency)}</div>
-            <div className="stat-hint">{summary.count} بند</div>
-          </div>
-          <div className="card">
-            <div className="card-title">حسب النوع</div>
+        <div className="grid grid-3 mb-4">
+          <Stat
+            label="إجمالي ما صُرف على التأسيس"
+            value={money(summary.total, currency)}
+            hint={`${summary.count} بند · أصل ثابت خارج أرباح الشهر`}
+            icon="building"
+            tone="accent"
+          />
+          <TableCard title="حسب النوع">
             <table>
               <tbody>
+                <TableMessage colSpan={2} empty={summary.by_type.length === 0} emptyTitle="لا توجد بنود" />
                 {summary.by_type.map((row) => (
                   <tr key={row.type}>
                     <td>{row.type}</td>
-                    <td className="num" style={{ textAlign: "left", fontWeight: 600 }}>
-                      {money(row.total, currency)}
-                    </td>
+                    <td className="num strong text-end">{money(row.total, currency)}</td>
                   </tr>
                 ))}
-                {summary.by_type.length === 0 && (
-                  <tr><td className="empty">لا توجد بنود</td></tr>
-                )}
               </tbody>
             </table>
-          </div>
-          <div className="card">
-            <div className="card-title">حسب الفرع</div>
+          </TableCard>
+          <TableCard title="حسب الفرع">
             <table>
               <tbody>
+                <TableMessage colSpan={2} empty={summary.by_branch.length === 0} emptyTitle="لا توجد بنود" />
                 {summary.by_branch.map((row) => (
                   <tr key={row.branch}>
                     <td>{row.branch}</td>
-                    <td className="num" style={{ textAlign: "left", fontWeight: 600 }}>
-                      {money(row.total, currency)}
-                    </td>
+                    <td className="num strong text-end">{money(row.total, currency)}</td>
                   </tr>
                 ))}
-                {summary.by_branch.length === 0 && (
-                  <tr><td className="empty">لا توجد بنود</td></tr>
-                )}
               </tbody>
             </table>
-          </div>
+          </TableCard>
         </div>
       )}
 
@@ -170,20 +169,27 @@ export default function FoundingCostsPage() {
             </tr>
           </thead>
           <tbody>
+            <TableMessage
+              colSpan={7}
+              empty={rows.length === 0}
+              emptyTitle="لم يُسجَّل أي بند تأسيسي بعد"
+              emptyText="الحظيرة والسياج والخزان والمولّدة — كل ما بُنيت به المزرعة يُسجَّل هنا أصلًا ثابتًا."
+            />
             {rows.map((row) => (
               <tr key={row.id}>
-                <td>{formatDate(row.happened_on)}</td>
-                <td style={{ fontWeight: 600 }}>{row.name}</td>
+                <td className="num">{formatDate(row.happened_on)}</td>
+                <td className="strong">{row.name}</td>
                 <td className="muted">{row.type_name || "—"}</td>
-                <td className="muted">{row.branch_name || "عام"}</td>
-                <td className="num" style={{ fontWeight: 600 }}>{money(row.amount, currency)}</td>
+                <td>
+                  <span className="badge badge-muted">{row.branch_name || "عام"}</span>
+                </td>
+                <td className="num strong">{money(row.amount, currency)}</td>
                 <td className="muted">{row.supplier_name || "—"}</td>
-                <td className="muted">{row.notes || "—"}</td>
+                <td className="muted truncate" style={{ maxWidth: 220 }}>
+                  {row.notes || "—"}
+                </td>
               </tr>
             ))}
-            {rows.length === 0 && (
-              <tr><td colSpan={7} className="empty">لم يُسجَّل أي بند تأسيسي بعد</td></tr>
-            )}
           </tbody>
         </table>
       </div>
@@ -243,12 +249,17 @@ function CostForm({
   }
 
   return (
-    <form className="card" style={{ marginBottom: 16 }} onSubmit={submit}>
-      <div className="card-title">بند تأسيسي جديد</div>
-      <p className="page-sub" style={{ marginBottom: 12 }}>
+    <form className="card mb-4" onSubmit={submit}>
+      <div className="card-title">
+        <span className="inline">
+          <Icon name="building" size={17} className="muted" />
+          بند تأسيسي جديد
+        </span>
+      </div>
+      <p className="page-sub mb-4">
         يُسجَّل كأصل ثابت، فلا يظهر ضمن مصاريف الشهر ولا يقلّل ربحه.
       </p>
-      {error && <div className="alert alert-error">{error}</div>}
+      <ErrorNote message={error} />
       <div className="row">
         <div className="field">
           <label>التاريخ</label>
@@ -311,7 +322,11 @@ function CostForm({
           <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
         </div>
       </div>
-      <button className="btn" disabled={busy}>{busy ? "جارٍ الحفظ…" : "حفظ"}</button>
+      <div className="form-actions">
+        <Button icon="check" busy={busy}>
+          {busy ? "جارٍ الحفظ…" : "حفظ البند"}
+        </Button>
+      </div>
     </form>
   );
 }

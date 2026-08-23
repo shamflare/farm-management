@@ -5,6 +5,15 @@ import Link from "next/link";
 import { api, formatDate, formatNumber, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 import Attachments from "@/components/Attachments";
+import Icon from "@/components/Icon";
+import {
+  Button,
+  ErrorNote,
+  PageHeader,
+  Stat,
+  SuccessNote,
+  TableMessage,
+} from "@/components/ui";
 
 type Catalog = { id: string; code: string; display_name: string; type: string };
 type Account = { id: string; display_name: string; is_cash: boolean };
@@ -44,7 +53,7 @@ const SETTLEMENT: Record<string, string> = {
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function SalesPage() {
-  const { can, currency } = useApp();
+  const { can, currency, me } = useApp();
   const [rows, setRows] = useState<Sale[]>([]);
   const [catalog, setCatalog] = useState<Catalog[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -90,22 +99,24 @@ export default function SalesPage() {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">بيع الحيوانات</h1>
-          <p className="page-sub">
-            المولود المباع يدخل «مبيعات المواليد»، والمستبعَد «مبيعات الفرزة» — كل على فرعه
-          </p>
-        </div>
+      <PageHeader
+        title="بيع الحيوانات"
+        subtitle="المولود المباع يدخل «مبيعات المواليد»، والمستبعَد «مبيعات الفرزة» — كل على فرعه"
+        farm={me?.farm?.name}
+      >
         {can("sales.create") && (
-          <button className="btn" onClick={() => setShowForm((v) => !v)}>
-            {showForm ? "إغلاق" : "+ عملية بيع"}
-          </button>
+          <Button
+            icon={showForm ? "close" : "plus"}
+            variant={showForm ? "ghost" : "primary"}
+            onClick={() => setShowForm((v) => !v)}
+          >
+            {showForm ? "إغلاق النموذج" : "عملية بيع"}
+          </Button>
         )}
-      </div>
+      </PageHeader>
 
-      {error && <div className="alert alert-error">{error}</div>}
-      {notice && <div className="alert alert-ok">{notice}</div>}
+      <ErrorNote message={error} />
+      <SuccessNote message={notice} />
 
       {showForm && (
         <SaleForm
@@ -120,19 +131,23 @@ export default function SalesPage() {
         />
       )}
 
-      <div className="grid grid-3" style={{ marginBottom: 16 }}>
-        <div className="card">
-          <div className="stat-label">عدد العمليات</div>
-          <div className="stat-value num">{rows.length}</div>
-        </div>
-        <div className="card">
-          <div className="stat-label">إجمالي المبيعات</div>
-          <div className="stat-value num positive">{money(total, currency)}</div>
-        </div>
-        <div className="card">
-          <div className="stat-label">المتبقي عند الزبائن</div>
-          <div className={`stat-value num ${due > 0 ? "negative" : ""}`}>{money(due, currency)}</div>
-        </div>
+      <div className="grid grid-3 mb-4">
+        <Stat label="عدد العمليات" value={rows.length} icon="banknote" />
+        <Stat
+          label="إجمالي المبيعات"
+          value={money(total, currency)}
+          valueTone="positive"
+          icon="trendUp"
+          tone="success"
+        />
+        <Stat
+          label="المتبقي عند الزبائن"
+          value={money(due, currency)}
+          valueTone={due > 0 ? "negative" : undefined}
+          icon="arrowEnd"
+          tone={due > 0 ? "warning" : "success"}
+          hint={due > 0 ? "ذمم لم تُحصَّل بعد" : "لا متبقٍّ عند الزبائن"}
+        />
       </div>
 
       <div className="table-wrap">
@@ -146,50 +161,60 @@ export default function SalesPage() {
               <th>نقل وعمولة</th>
               <th>المحصَّل</th>
               <th>الحالة</th>
-              <th></th>
+              <th className="cell-actions" />
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan={8} className="empty">جارٍ التحميل…</td></tr>}
-            {!loading && rows.length === 0 && (
-              <tr><td colSpan={8} className="empty">لا توجد عمليات بيع</td></tr>
-            )}
-            {rows.map((row) => (
+            <TableMessage
+              colSpan={8}
+              loading={loading}
+              empty={rows.length === 0}
+              emptyTitle="لا توجد عمليات بيع"
+              emptyText="سجّل أول عملية بيع؛ بند الإيراد يُختار من الحيوان نفسه بلا حقل إضافي."
+            />
+            {!loading &&
+              rows.map((row) => (
               <Fragment key={row.id}>
                 <tr>
-                  <td>{formatDate(row.happened_on)}</td>
+                  <td className="num">{formatDate(row.happened_on)}</td>
                   <td>{row.customer_name || "—"}</td>
                   <td className="num">{row.items.length}</td>
-                  <td className="num" style={{ fontWeight: 700 }}>{money(row.total_price, currency)}</td>
+                  <td className="num strong">{money(row.total_price, currency)}</td>
                   <td className="num muted">
                     {money(Number(row.transport_cost) + Number(row.commission_cost), currency)}
                   </td>
                   <td className="num">{money(row.received_amount, currency)}</td>
                   <td>
-                    <span className={`badge ${row.settlement_status === "paid" ? "" : "badge-warning"}`}>
+                    <span
+                      className={`badge ${
+                        row.settlement_status === "paid" ? "badge-success" : "badge-warning"
+                      }`}
+                    >
                       {SETTLEMENT[row.settlement_status] ?? row.settlement_status}
                     </span>
                   </td>
-                  <td>
-                    <button
-                      className="btn btn-ghost btn-sm"
+                  <td className="cell-actions">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      icon={expanded === row.id ? "chevronUp" : "chevronDown"}
                       onClick={() => setExpanded(expanded === row.id ? "" : row.id)}
                     >
                       {expanded === row.id ? "إخفاء" : "الحيوانات"}
-                    </button>
+                    </Button>
                   </td>
                 </tr>
                 {expanded === row.id && (
                   <tr>
-                    <td colSpan={8} style={{ background: "var(--color-bg)" }}>
-                      <table>
+                    <td colSpan={8} className="subtable-cell">
+                      <table className="subtable">
                         <thead>
                           <tr><th>الحيوان</th><th>السعر</th><th>الوزن</th></tr>
                         </thead>
                         <tbody>
                           {row.items.map((item) => (
                             <tr key={item.id}>
-                              <td>{item.animal_tag}</td>
+                              <td className="num">{item.animal_tag}</td>
                               <td className="num">{money(item.unit_price, currency)}</td>
                               <td className="num muted">
                                 {item.weight_kg ? `${formatNumber(item.weight_kg, 1)} كغ` : "—"}
@@ -198,15 +223,17 @@ export default function SalesPage() {
                           ))}
                         </tbody>
                       </table>
-                      {row.notes && <div className="muted" style={{ padding: 8 }}>{row.notes}</div>}
-                      {can("attachments.view") && (
-                        <Attachments
-                          subjectType="sale"
-                          subjectId={row.id}
-                          title="فاتورة البيع والإيصالات"
-                          allowPhoto={false}
-                        />
-                      )}
+                      <div style={{ padding: "var(--s4)" }}>
+                        {row.notes && <p className="muted text-sm mb-4">{row.notes}</p>}
+                        {can("attachments.view") && (
+                          <Attachments
+                            subjectType="sale"
+                            subjectId={row.id}
+                            title="فاتورة البيع والإيصالات"
+                            allowPhoto={false}
+                          />
+                        )}
+                      </div>
                     </td>
                   </tr>
                 )}
@@ -309,12 +336,17 @@ function SaleForm({
   }
 
   return (
-    <form className="card" style={{ marginBottom: 16 }} onSubmit={submit}>
-      <div className="card-title">عملية بيع جديدة</div>
-      <p className="page-sub" style={{ marginBottom: 12 }}>
+    <form className="card mb-4" onSubmit={submit}>
+      <div className="card-title">
+        <span className="inline">
+          <Icon name="banknote" size={17} className="muted" />
+          عملية بيع جديدة
+        </span>
+      </div>
+      <p className="page-sub mb-4">
         اختر «استبعاد» في سبب البيع لتذهب القيمة إلى بند مبيعات الفرزة بدل مبيعات المواليد.
       </p>
-      {error && <div className="alert alert-error">{error}</div>}
+      <ErrorNote message={error} />
 
       <div className="row">
         <div className="field">
@@ -354,64 +386,80 @@ function SaleForm({
         </div>
       </div>
 
-      <div className="stat-label" style={{ margin: "12px 0 8px" }}>الحيوانات المباعة ({lines.length})</div>
-      {lines.map((line, index) => (
-        <div className="row" key={index} style={{ marginBottom: 8 }}>
-          <div className="field" style={{ margin: 0, flex: "2 1 260px" }}>
-            <label>الحيوان</label>
-            <select value={line.animal} onChange={(e) => update(index, { animal: e.target.value })} required>
-              <option value="">اختر…</option>
-              {animals
-                .filter((animal) => animal.id === line.animal || !chosen.has(animal.id))
-                .map((animal) => (
-                  <option key={animal.id} value={animal.id}>
-                    {animal.tag} {animal.name} {animal.branch_name && `· ${animal.branch_name}`}
-                  </option>
-                ))}
-            </select>
-          </div>
-          <div className="field" style={{ margin: 0 }}>
-            <label>سعر البيع</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={line.unit_price}
-              onChange={(e) => update(index, { unit_price: e.target.value })}
-              required
-            />
-          </div>
-          <div className="field" style={{ margin: 0 }}>
-            <label>الوزن (كغ)</label>
-            <input
-              type="number"
-              step="0.001"
-              min="0"
-              value={line.weight_kg}
-              onChange={(e) => update(index, { weight_kg: e.target.value })}
-            />
-          </div>
-          <div style={{ alignSelf: "end" }}>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => setLines(lines.filter((_, i) => i !== index))}
-              disabled={lines.length === 1}
-            >
-              حذف
-            </button>
-          </div>
-        </div>
-      ))}
-      <button
-        type="button"
-        className="btn btn-ghost btn-sm"
-        onClick={() => setLines([...lines, { animal: "", unit_price: "", weight_kg: "" }])}
-      >
-        + حيوان آخر
-      </button>
+      <div className="divider" />
+      <div className="section-title">الحيوانات المباعة ({lines.length})</div>
 
-      <div className="row" style={{ marginTop: 16 }}>
+      <div className="stack">
+        {lines.map((line, index) => (
+          <div className="row" key={index}>
+            <div className="field row-wide">
+              <label>الحيوان</label>
+              <select
+                value={line.animal}
+                onChange={(e) => update(index, { animal: e.target.value })}
+                required
+              >
+                <option value="">اختر…</option>
+                {animals
+                  .filter((animal) => animal.id === line.animal || !chosen.has(animal.id))
+                  .map((animal) => (
+                    <option key={animal.id} value={animal.id}>
+                      {animal.tag} {animal.name} {animal.branch_name && `· ${animal.branch_name}`}
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>سعر البيع</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={line.unit_price}
+                onChange={(e) => update(index, { unit_price: e.target.value })}
+                required
+              />
+            </div>
+            <div className="field">
+              <label>الوزن (كغ)</label>
+              <input
+                type="number"
+                step="0.001"
+                min="0"
+                value={line.weight_kg}
+                onChange={(e) => update(index, { weight_kg: e.target.value })}
+              />
+            </div>
+            <div style={{ flex: "0 0 auto" }}>
+              <button
+                type="button"
+                className="icon-btn bordered"
+                title="حذف السطر"
+                aria-label="حذف السطر"
+                onClick={() => setLines(lines.filter((_, i) => i !== index))}
+                disabled={lines.length === 1}
+              >
+                <Icon name="trash" size={16} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          icon="plus"
+          onClick={() => setLines([...lines, { animal: "", unit_price: "", weight_kg: "" }])}
+        >
+          حيوان آخر
+        </Button>
+      </div>
+
+      <div className="divider" />
+      <div className="row">
         <div className="field">
           <label>تكلفة النقل</label>
           <input
@@ -451,17 +499,24 @@ function SaleForm({
             onChange={(e) => setForm({ ...form, received_amount: e.target.value })}
           />
         </div>
-        <div className="field" style={{ flex: "2 1 240px" }}>
+        <div className="field row-wide">
           <label>ملاحظات</label>
           <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
         </div>
       </div>
 
-      <div className="alert alert-ok" style={{ marginTop: 12 }}>
-        إجمالي البيع <strong>{money(animalsPrice, currency)}</strong>
+      <div className="alert alert-info mt-5">
+        <Icon name="coins" />
+        <span>
+          إجمالي البيع <strong>{money(animalsPrice, currency)}</strong>
+        </span>
       </div>
 
-      <button className="btn" disabled={busy}>{busy ? "جارٍ الحفظ…" : "تسجيل البيع"}</button>
+      <div className="form-actions">
+        <Button icon="check" busy={busy}>
+          {busy ? "جارٍ الحفظ…" : "تسجيل البيع"}
+        </Button>
+      </div>
     </form>
   );
 }

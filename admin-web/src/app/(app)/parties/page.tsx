@@ -3,6 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, download, formatDate, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
+import Icon from "@/components/Icon";
+import {
+  Button,
+  ErrorNote,
+  ExportButton,
+  PageHeader,
+  RowMenu,
+  SuccessNote,
+  TableMessage,
+  Tabs,
+} from "@/components/ui";
 
 type Summary = {
   party_id: string;
@@ -37,10 +48,16 @@ const KIND_LABEL: Record<string, string> = {
   other: "أخرى",
 };
 
-const KINDS = ["all", "partner", "worker", "supplier", "customer"];
+const KIND_TABS = [
+  { key: "", label: "الكل" },
+  { key: "partner", label: "شريك" },
+  { key: "worker", label: "عامل / مشرف" },
+  { key: "supplier", label: "مورد" },
+  { key: "customer", label: "عميل" },
+];
 
 export default function PartiesPage() {
-  const { can, currency } = useApp();
+  const { can, currency, me } = useApp();
   const [rows, setRows] = useState<Party[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [kind, setKind] = useState("");
@@ -167,30 +184,29 @@ ${reasons.join("  ·  ")}
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">الأشخاص والحسابات</h1>
-          <p className="page-sub">لكل شخص حساب حقيقي في الدفتر — الأرصدة محسوبة من القيود</p>
-        </div>
-        <div style={{ display: "flex", gap: 10 }}>
+      <PageHeader
+        title="الأشخاص والحسابات"
+        subtitle="لكل شخص حساب حقيقي في الدفتر — الأرصدة محسوبة من القيود"
+        farm={me?.farm?.name}
+      >
         {can("reports.export") && (
-          <button
-            className="btn btn-ghost"
+          <ExportButton
             onClick={() => download("/export/parties/").catch((err) => setError(err.message))}
-          >
-            ⬇ تصدير CSV
-          </button>
+          />
         )}
         {can("parties.create") && (
-          <button className="btn" onClick={startCreate}>
-            {showForm && !editing ? "إغلاق" : "+ إضافة شخص"}
-          </button>
+          <Button
+            icon={showForm && !editing ? "close" : "plus"}
+            variant={showForm && !editing ? "ghost" : "primary"}
+            onClick={startCreate}
+          >
+            {showForm && !editing ? "إغلاق النموذج" : "إضافة شخص"}
+          </Button>
         )}
-        </div>
-      </div>
+      </PageHeader>
 
-      {error && <div className="alert alert-error">{error}</div>}
-      {notice && <div className="alert alert-ok">{notice}</div>}
+      <ErrorNote message={error} />
+      <SuccessNote message={notice} />
 
       {showForm && (
         <PartyForm
@@ -209,17 +225,7 @@ ${reasons.join("  ·  ")}
         />
       )}
 
-      <div className="tabs">
-        {KINDS.map((value) => (
-          <button
-            key={value}
-            className={`tab ${kind === (value === "all" ? "" : value) ? "active" : ""}`}
-            onClick={() => setKind(value === "all" ? "" : value)}
-          >
-            {value === "all" ? "الكل" : KIND_LABEL[value]}
-          </button>
-        ))}
-      </div>
+      <Tabs value={kind} onChange={setKind} options={KIND_TABS} />
 
       <div className="table-wrap">
         <table>
@@ -232,70 +238,103 @@ ${reasons.join("  ·  ")}
               <th>له علينا</th>
               <th>رأس المال</th>
               <th>النسبة</th>
-              <th>الحركات المالية</th>
-              <th>إدارة السجل</th>
+              <th className="cell-actions">الإجراءات</th>
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 && <tr><td colSpan={9} className="empty">لا توجد سجلات</td></tr>}
+            <TableMessage
+              colSpan={8}
+              empty={rows.length === 0}
+              emptyTitle="لا توجد سجلات"
+              emptyText="أضف الشركاء والعاملين والموردين والزبائن؛ لكل واحد منهم حساب حقيقي في الدفتر."
+            />
             {rows.map((party) => {
               const s = party.summary;
               const locked = blockingBalances(party).length > 0;
               return (
                 <tr key={party.id} style={party.is_active ? undefined : { opacity: 0.55 }}>
-                  <td style={{ fontWeight: 600 }}>
-                    {party.name}
-                    {!party.is_active && (
-                      <span className="badge badge-muted" style={{ marginInlineStart: 8 }}>معطّل</span>
-                    )}
+                  <td className="strong">
+                    <span className="inline" style={{ gap: "var(--s2)" }}>
+                      {party.name}
+                      {!party.is_active && <span className="badge badge-muted">معطّل</span>}
+                    </span>
                   </td>
-                  <td><span className="badge">{KIND_LABEL[party.kind]}</span></td>
-                  <td className="muted">{party.phone || "—"}</td>
-                  <td className="num">{s.owed_to_farm ? money(s.owed_to_farm, currency) : "—"}</td>
-                  <td className={`num ${s.owed_by_farm ? "negative" : ""}`}>
+                  <td>
+                    <span className="badge badge-muted">{KIND_LABEL[party.kind]}</span>
+                  </td>
+                  <td className="muted num">{party.phone || "—"}</td>
+                  <td className={`num ${s.owed_to_farm ? "positive" : "muted"}`}>
+                    {s.owed_to_farm ? money(s.owed_to_farm, currency) : "—"}
+                  </td>
+                  <td className={`num ${s.owed_by_farm ? "negative" : "muted"}`}>
                     {s.owed_by_farm ? money(s.owed_by_farm, currency) : "—"}
                   </td>
                   <td className="num">{s.net_capital ? money(s.net_capital, currency) : "—"}</td>
-                  <td className="num">{s.ownership_percentage != null ? `${s.ownership_percentage}%` : "—"}</td>
-
-                  <td style={{ whiteSpace: "nowrap" }}>
-                    <button className="btn btn-sm btn-ghost" onClick={() => openStatement(party)}>كشف حساب</button>{" "}
-                    {s.owed_by_farm > 0 && can("workers.settle") && (
-                      <button className="btn btn-sm" onClick={() => moneyAction(party, "settle")}>تسديد</button>
-                    )}{" "}
-                    {s.owed_to_farm > 0 && can("finance.create") && (
-                      <button className="btn btn-sm" onClick={() => moneyAction(party, "collect")}>تحصيل</button>
-                    )}{" "}
-                    {party.kind === "partner" && can("partners.edit") && (
-                      <>
-                        <button className="btn btn-sm btn-ghost" onClick={() => moneyAction(party, "capital")}>إيداع</button>{" "}
-                        <button className="btn btn-sm btn-ghost" onClick={() => moneyAction(party, "withdraw")}>سحب</button>
-                      </>
-                    )}
+                  <td className="num">
+                    {s.ownership_percentage != null ? `${s.ownership_percentage}%` : "—"}
                   </td>
 
-                  <td style={{ whiteSpace: "nowrap" }}>
-                    {can("parties.edit") && (
-                      <>
-                        <button className="btn btn-sm btn-ghost" onClick={() => startEdit(party)}>تعديل</button>{" "}
-                        <button className="btn btn-sm btn-ghost" onClick={() => toggleActive(party)}>
-                          {party.is_active ? "تعطيل" : "تفعيل"}
-                        </button>{" "}
-                      </>
-                    )}
-                    {can("parties.delete") && (
-                      <button
-                        className={`btn btn-sm ${locked ? "btn-ghost" : "btn-danger"}`}
-                        onClick={() => remove(party)}
-                        title={
-                          locked
-                            ? "حسابه ليس صفرًا — اضغط لمعرفة السبب والبديل"
-                            : "حذف السجل"
-                        }
+                  <td className="cell-actions">
+                    <span className="cell-actions-group">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        icon="file"
+                        onClick={() => openStatement(party)}
                       >
-                        {locked ? "🔒 حذف" : "حذف"}
-                      </button>
-                    )}
+                        كشف حساب
+                      </Button>
+                      <RowMenu
+                        actions={[
+                          {
+                            label: "تسديد ما له علينا",
+                            icon: "arrowStart",
+                            hidden: !(s.owed_by_farm > 0 && can("workers.settle")),
+                            onClick: () => moneyAction(party, "settle"),
+                          },
+                          {
+                            label: "تحصيل ما لنا عنده",
+                            icon: "arrowEnd",
+                            hidden: !(s.owed_to_farm > 0 && can("finance.create")),
+                            onClick: () => moneyAction(party, "collect"),
+                          },
+                          {
+                            label: "إيداع رأس مال",
+                            icon: "coins",
+                            hidden: !(party.kind === "partner" && can("partners.edit")),
+                            onClick: () => moneyAction(party, "capital"),
+                          },
+                          {
+                            label: "سحب من رأس المال",
+                            icon: "wallet",
+                            hidden: !(party.kind === "partner" && can("partners.edit")),
+                            onClick: () => moneyAction(party, "withdraw"),
+                          },
+                          {
+                            label: "تعديل البيانات",
+                            icon: "edit",
+                            hidden: !can("parties.edit"),
+                            onClick: () => startEdit(party),
+                          },
+                          {
+                            label: party.is_active ? "تعطيل" : "تفعيل",
+                            icon: party.is_active ? "lock" : "check",
+                            hidden: !can("parties.edit"),
+                            onClick: () => toggleActive(party),
+                          },
+                          {
+                            label: locked ? "حذف (الحساب ليس صفرًا)" : "حذف",
+                            icon: locked ? "lock" : "trash",
+                            danger: !locked,
+                            hidden: !can("parties.delete"),
+                            title: locked
+                              ? "حسابه ليس صفرًا — اضغط لمعرفة السبب والبديل"
+                              : "حذف السجل",
+                            onClick: () => remove(party),
+                          },
+                        ]}
+                      />
+                    </span>
                   </td>
                 </tr>
               );
@@ -304,51 +343,69 @@ ${reasons.join("  ·  ")}
         </table>
       </div>
 
-      <p className="page-sub" style={{ marginTop: 12 }}>
-        🔒 يعني أن حساب الشخص ليس صفرًا: له أو عليه مبلغ، أو له رأس مال في المزرعة. اضغط الزر
-        لترى المبلغ بالضبط. لتتمكن من الحذف: سدّد أو حصّل الرصيد (وللشريك اسحب مساهمته) — أو
-        عطّله فيختفي من قوائم الاختيار ويبقى رصيده ظاهرًا في التقارير. الحذف نفسه لا يمس الدفتر:
-        القيود وكشوف الحسابات تبقى كما هي.
-      </p>
+      <div className="alert alert-info mt-4 no-print">
+        <Icon name="lock" />
+        <span>
+          «الحساب ليس صفرًا» يعني أن للشخص أو عليه مبلغًا، أو له رأس مال في المزرعة. لتتمكن من
+          الحذف: سدّد أو حصّل الرصيد (وللشريك اسحب مساهمته) — أو عطّله فيختفي من قوائم الاختيار
+          ويبقى رصيده ظاهرًا في التقارير. الحذف نفسه لا يمس الدفتر: القيود وكشوف الحسابات تبقى كما هي.
+        </span>
+      </div>
 
       {statement && (
-        <div className="card" style={{ marginTop: 20 }}>
+        <div className="card mt-5">
           <div className="card-title">
-            <span>كشف حساب: {statement.party.name}</span>
-            <button className="btn btn-sm btn-ghost" onClick={() => setStatement(null)}>إغلاق</button>
+            <span className="inline">
+              <Icon name="file" size={17} className="muted" />
+              كشف حساب: {statement.party.name}
+            </span>
+            <Button size="sm" variant="ghost" icon="close" onClick={() => setStatement(null)}>
+              إغلاق
+            </Button>
           </div>
-          {statement.sections.map((section: any) => (
-            <div key={section.slot} style={{ marginBottom: 18 }}>
-              <div style={{ fontWeight: 600, marginBottom: 8 }}>
-                {section.account} · الرصيد {money(section.closing_balance, currency)}
-              </div>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>التاريخ</th>
-                      <th>البيان</th>
-                      <th>مدين</th>
-                      <th>دائن</th>
-                      <th>الرصيد</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {section.rows.length === 0 && <tr><td colSpan={5} className="empty">لا توجد حركات</td></tr>}
-                    {section.rows.map((row: any, index: number) => (
-                      <tr key={index}>
-                        <td>{formatDate(row.date)}</td>
-                        <td>{row.memo || "—"}</td>
-                        <td className="num">{Number(row.debit) ? money(row.debit, currency) : "—"}</td>
-                        <td className="num">{Number(row.credit) ? money(row.credit, currency) : "—"}</td>
-                        <td className="num" style={{ fontWeight: 600 }}>{money(row.balance_after, currency)}</td>
+          <div className="stack-lg">
+            {statement.sections.map((section: any) => (
+              <div key={section.slot}>
+                <div className="between mb-4">
+                  <span className="strong">{section.account}</span>
+                  <span className="badge">الرصيد {money(section.closing_balance, currency)}</span>
+                </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>التاريخ</th>
+                        <th>البيان</th>
+                        <th>مدين</th>
+                        <th>دائن</th>
+                        <th>الرصيد</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      <TableMessage
+                        colSpan={5}
+                        empty={section.rows.length === 0}
+                        emptyTitle="لا توجد حركات على هذا الحساب"
+                      />
+                      {section.rows.map((row: any, index: number) => (
+                        <tr key={index}>
+                          <td className="num">{formatDate(row.date)}</td>
+                          <td>{row.memo || "—"}</td>
+                          <td className="num">
+                            {Number(row.debit) ? money(row.debit, currency) : "—"}
+                          </td>
+                          <td className="num">
+                            {Number(row.credit) ? money(row.credit, currency) : "—"}
+                          </td>
+                          <td className="num strong">{money(row.balance_after, currency)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
     </>
@@ -423,10 +480,15 @@ function PartyForm({
   }
 
   return (
-    <form className="card" style={{ marginBottom: 16 }} onSubmit={submit}>
+    <form className="card mb-4" onSubmit={submit}>
       <div className="card-title">
-        <span>{initial ? `تعديل: ${initial.name}` : "شخص جديد"}</span>
-        <button type="button" className="btn btn-sm btn-ghost" onClick={onCancel}>إلغاء</button>
+        <span className="inline">
+          <Icon name={initial ? "edit" : "plus"} size={17} className="muted" />
+          {initial ? `تعديل: ${initial.name}` : "شخص جديد"}
+        </span>
+        <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
+          إلغاء
+        </Button>
       </div>
       <div className="row">
         <div className="field">
@@ -467,19 +529,19 @@ function PartyForm({
             />
           </div>
         )}
-        <div className="field" style={{ flex: "2 1 240px" }}>
+        <div className="field row-wide">
           <label>ملاحظات</label>
           <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
         </div>
       </div>
-      <button className="btn" disabled={busy}>
-        {busy ? "جارٍ الحفظ…" : initial ? "حفظ التعديل" : "حفظ"}
-      </button>
-      {initial && form.kind === "partner" && (
-        <span className="stat-hint" style={{ marginInlineStart: 12 }}>
-          تغيير النسبة يُسجَّل في تاريخ الشراكة ولا يُمحى.
-        </span>
-      )}
+      <div className="form-actions">
+        <Button icon="check" busy={busy}>
+          {busy ? "جارٍ الحفظ…" : initial ? "حفظ التعديل" : "حفظ"}
+        </Button>
+        {initial && form.kind === "partner" && (
+          <span className="stat-hint">تغيير النسبة يُسجَّل في تاريخ الشراكة ولا يُمحى.</span>
+        )}
+      </div>
     </form>
   );
 }

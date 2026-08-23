@@ -3,6 +3,14 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
+import Icon from "@/components/Icon";
+import {
+  Button,
+  ErrorNote,
+  PageHeader,
+  SuccessNote,
+  TableMessage,
+} from "@/components/ui";
 
 type Role = { id: string; code: string; display_name: string };
 type Member = {
@@ -99,22 +107,24 @@ export default function UsersPage() {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">المستخدمون والدخول</h1>
-          <p className="page-sub">
-            لكل شخص حساب دخول خاص به — لأن كل عملية تُسجَّل باسم من نفّذها
-          </p>
-        </div>
+      <PageHeader
+        title="المستخدمون والصلاحيات"
+        subtitle="لكل شخص حساب دخول خاص به — لأن كل عملية تُسجَّل باسم من نفّذها"
+        farm={me?.farm?.name}
+      >
         {can("users.create") && (
-          <button className="btn" onClick={() => setShowForm((v) => !v)}>
-            {showForm ? "إغلاق" : "+ حساب دخول جديد"}
-          </button>
+          <Button
+            icon={showForm ? "close" : "plus"}
+            variant={showForm ? "ghost" : "primary"}
+            onClick={() => setShowForm((v) => !v)}
+          >
+            {showForm ? "إغلاق النموذج" : "حساب دخول جديد"}
+          </Button>
         )}
-      </div>
+      </PageHeader>
 
-      {error && <div className="alert alert-error">{error}</div>}
-      {notice && <div className="alert alert-ok">{notice}</div>}
+      <ErrorNote message={error} />
+      <SuccessNote message={notice} />
 
       {showForm && (
         <MemberForm
@@ -138,26 +148,33 @@ export default function UsersPage() {
               <th>الدور</th>
               <th>مرتبط بسجل</th>
               <th>الحالة</th>
-              <th></th>
+              <th className="cell-actions" />
             </tr>
           </thead>
           <tbody>
-            {members.length === 0 && <tr><td colSpan={6} className="empty">لا يوجد مستخدمون</td></tr>}
+            <TableMessage
+              colSpan={6}
+              empty={members.length === 0}
+              emptyTitle="لا يوجد مستخدمون"
+              emptyText="أنشئ حساب دخول لكل شخص يعمل على النظام، ليُنسب ما يسجّله إليه في سجل التدقيق."
+            />
             {members.map((member) => {
               const isMe = member.user.id === me?.user.id;
               return (
                 <tr key={member.id} style={member.is_active ? undefined : { opacity: 0.55 }}>
-                  <td style={{ fontWeight: 600 }}>
-                    {member.user.full_name || member.user.username}
-                    {isMe && <span className="badge" style={{ marginInlineStart: 8 }}>أنت</span>}
+                  <td className="strong">
+                    <span className="inline" style={{ gap: "var(--s2)" }}>
+                      {member.user.full_name || member.user.username}
+                      {isMe && <span className="badge">أنت</span>}
+                    </span>
                   </td>
                   <td className="muted num">{member.user.username}</td>
                   <td>
                     {can("users.edit") ? (
                       <select
+                        className="input"
                         value={member.role.id}
                         onChange={(e) => changeRole(member, e.target.value)}
-                        style={{ padding: 6, borderRadius: 8, border: "1px solid var(--color-border)" }}
                       >
                         {roles.map((role) => (
                           <option key={role.id} value={role.id}>{role.display_name}</option>
@@ -170,9 +187,9 @@ export default function UsersPage() {
                   <td>
                     {can("users.edit") ? (
                       <select
+                        className="input"
                         value={member.party?.id ?? ""}
                         onChange={(e) => linkParty(member, e.target.value)}
-                        style={{ padding: 6, borderRadius: 8, border: "1px solid var(--color-border)" }}
                       >
                         <option value="">— غير مرتبط —</option>
                         {member.party && (
@@ -191,25 +208,32 @@ export default function UsersPage() {
                     )}
                   </td>
                   <td>
-                    <span className={`badge ${member.is_active ? "" : "badge-muted"}`}>
+                    <span className={`badge ${member.is_active ? "badge-success" : "badge-muted"}`}>
                       {member.is_active ? "يستطيع الدخول" : "موقوف"}
                     </span>
                   </td>
-                  <td style={{ whiteSpace: "nowrap" }}>
+                  <td className="cell-actions">
                     {can("users.edit") && (
-                      <>
-                        <button className="btn btn-sm btn-ghost" onClick={() => resetPassword(member)}>
+                      <span className="cell-actions-group">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          icon="key"
+                          onClick={() => resetPassword(member)}
+                        >
                           كلمة المرور
-                        </button>{" "}
-                        <button
-                          className="btn btn-sm btn-ghost"
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          icon={member.is_active ? "lock" : "check"}
                           onClick={() => toggleActive(member)}
                           disabled={isMe}
                           title={isMe ? "لا يمكنك إيقاف حسابك أنت" : ""}
                         >
                           {member.is_active ? "إيقاف" : "تفعيل"}
-                        </button>
-                      </>
+                        </Button>
+                      </span>
                     )}
                   </td>
                 </tr>
@@ -219,10 +243,13 @@ export default function UsersPage() {
         </table>
       </div>
 
-      <p className="page-sub" style={{ marginTop: 12 }}>
-        الربط بسجل شخص يجعل «فراس الظاهر» في قائمة العاملين هو نفسه صاحب حساب الدخول: ما يدفعه من
-        جيبه يظهر في حسابه، وما يسجّله يظهر باسمه في سجل التدقيق.
-      </p>
+      <div className="alert alert-info mt-4 no-print">
+        <Icon name="info" />
+        <span>
+          الربط بسجل شخص يجعل الاسم في قائمة العاملين هو نفسه صاحب حساب الدخول: ما يدفعه من جيبه
+          يظهر في حسابه، وما يسجّله يظهر باسمه في سجل التدقيق.
+        </span>
+      </div>
     </>
   );
 }
@@ -267,7 +294,7 @@ function MemberForm({
   }
 
   return (
-    <form className="card" style={{ marginBottom: 16 }} onSubmit={submit}>
+    <form className="card mb-4" onSubmit={submit}>
       <div className="card-title">حساب دخول جديد</div>
       <div className="row">
         <div className="field">
@@ -323,7 +350,11 @@ function MemberForm({
           </select>
         </div>
       </div>
-      <button className="btn" disabled={busy}>{busy ? "جارٍ الإنشاء…" : "إنشاء الحساب"}</button>
+      <div className="form-actions">
+        <Button icon="check" busy={busy}>
+          {busy ? "جارٍ الإنشاء…" : "إنشاء الحساب"}
+        </Button>
+      </div>
       <span className="stat-hint" style={{ marginInlineStart: 12 }}>
         الدخول باسم المستخدم وكلمة المرور — البريد الإلكتروني اختياري وغير مستخدم للدخول.
       </span>

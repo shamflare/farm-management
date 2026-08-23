@@ -2,8 +2,19 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { api, download, formatDate } from "@/lib/api";
+import { api, download, formatDate, formatNumber } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
+import Icon from "@/components/Icon";
+import {
+  Button,
+  ErrorNote,
+  ExportButton,
+  PageHeader,
+  SearchField,
+  SelectField,
+  TableMessage,
+  Toolbar,
+} from "@/components/ui";
 
 type Catalog = { id: string; code: string; display_name: string; type: string; parent: string | null };
 type Animal = {
@@ -26,8 +37,14 @@ type Page<T> = { count: number; next: string | null; results: T[] };
 
 const SEX_LABEL: Record<string, string> = { female: "أنثى", male: "ذكر", unknown: "غير محدد" };
 
+const STATUS_TONE: Record<string, string> = {
+  dead: "badge-danger",
+  sold: "badge-muted",
+  active: "badge-success",
+};
+
 export default function AnimalsPage() {
-  const { can } = useApp();
+  const { can, me } = useApp();
   const [catalog, setCatalog] = useState<Catalog[]>([]);
   const [rows, setRows] = useState<Animal[]>([]);
   const [count, setCount] = useState(0);
@@ -81,35 +98,37 @@ export default function AnimalsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters, search]);
 
+  const filtered =
+    search !== "" || Object.values(filters).some((value) => value && value !== "true");
+
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">الحيوانات</h1>
-          <p className="page-sub">{count} حيوان · المباع والنافق يبقيان في السجل والنسب</p>
-        </div>
-        <div style={{ display: "flex", gap: 10 }}>
-          {can("animals.export") && (
-            <button
-              className="btn btn-ghost"
-              onClick={() =>
-                download(
-                  `/export/animals/?branch=${filters.branch}&is_on_farm=${filters.is_on_farm}`
-                ).catch((err) => setError(err.message))
-              }
-            >
-              ⬇ تصدير CSV
-            </button>
-          )}
-          {can("animals.create") && (
-            <button className="btn" onClick={() => setShowForm((v) => !v)}>
-              {showForm ? "إغلاق" : "+ إضافة حيوان"}
-            </button>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title="الحيوانات"
+        subtitle={`${formatNumber(count)} حيوان · المباع والنافق يبقيان في السجل والنسب`}
+        farm={me?.farm?.name}
+      >
+        {can("animals.export") && (
+          <ExportButton
+            onClick={() =>
+              download(
+                `/export/animals/?branch=${filters.branch}&is_on_farm=${filters.is_on_farm}`
+              ).catch((err) => setError(err.message))
+            }
+          />
+        )}
+        {can("animals.create") && (
+          <Button
+            icon={showForm ? "close" : "plus"}
+            variant={showForm ? "ghost" : "primary"}
+            onClick={() => setShowForm((open) => !open)}
+          >
+            {showForm ? "إغلاق النموذج" : "إضافة حيوان"}
+          </Button>
+        )}
+      </PageHeader>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      <ErrorNote message={error} />
 
       {showForm && (
         <AnimalForm
@@ -121,61 +140,67 @@ export default function AnimalsPage() {
         />
       )}
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="row">
-          <div className="field" style={{ margin: 0 }}>
-            <label>بحث</label>
-            <input
-              placeholder="رقم الحيوان، الاسم، رقم الشريحة…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <div className="field" style={{ margin: 0 }}>
-            <label>الفرع</label>
-            <select value={filters.branch} onChange={(e) => setFilters({ ...filters, branch: e.target.value })}>
-              <option value="">كل الفروع</option>
-              {(byType["branch"] ?? []).map((item) => (
-                <option key={item.id} value={item.id}>{item.display_name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field" style={{ margin: 0 }}>
-            <label>النوع</label>
-            <select value={filters.animal_type} onChange={(e) => setFilters({ ...filters, animal_type: e.target.value })}>
-              <option value="">الكل</option>
-              {(byType["animal_type"] ?? []).map((item) => (
-                <option key={item.id} value={item.id}>{item.display_name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field" style={{ margin: 0 }}>
-            <label>الحالة</label>
-            <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
-              <option value="">الكل</option>
-              {(byType["animal_status"] ?? []).map((item) => (
-                <option key={item.id} value={item.id}>{item.display_name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field" style={{ margin: 0 }}>
-            <label>الجنس</label>
-            <select value={filters.sex} onChange={(e) => setFilters({ ...filters, sex: e.target.value })}>
-              <option value="">الكل</option>
-              <option value="female">أنثى</option>
-              <option value="male">ذكر</option>
-            </select>
-          </div>
-          <div className="field" style={{ margin: 0 }}>
-            <label>الوجود</label>
-            <select value={filters.is_on_farm} onChange={(e) => setFilters({ ...filters, is_on_farm: e.target.value })}>
-              <option value="true">في المزرعة</option>
-              <option value="false">خارج المزرعة</option>
-              <option value="">الكل</option>
-            </select>
-          </div>
-        </div>
-      </div>
+      <Toolbar>
+        <SearchField
+          value={search}
+          onChange={setSearch}
+          placeholder="رقم الحيوان، الاسم، رقم الشريحة…"
+        />
+        <SelectField
+          label="الفرع"
+          value={filters.branch}
+          onChange={(value) => setFilters({ ...filters, branch: value })}
+        >
+          <option value="">كل الفروع</option>
+          {(byType["branch"] ?? []).map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.display_name}
+            </option>
+          ))}
+        </SelectField>
+        <SelectField
+          label="النوع"
+          value={filters.animal_type}
+          onChange={(value) => setFilters({ ...filters, animal_type: value })}
+        >
+          <option value="">الكل</option>
+          {(byType["animal_type"] ?? []).map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.display_name}
+            </option>
+          ))}
+        </SelectField>
+        <SelectField
+          label="الحالة"
+          value={filters.status}
+          onChange={(value) => setFilters({ ...filters, status: value })}
+        >
+          <option value="">الكل</option>
+          {(byType["animal_status"] ?? []).map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.display_name}
+            </option>
+          ))}
+        </SelectField>
+        <SelectField
+          label="الجنس"
+          value={filters.sex}
+          onChange={(value) => setFilters({ ...filters, sex: value })}
+        >
+          <option value="">الكل</option>
+          <option value="female">أنثى</option>
+          <option value="male">ذكر</option>
+        </SelectField>
+        <SelectField
+          label="الوجود"
+          value={filters.is_on_farm}
+          onChange={(value) => setFilters({ ...filters, is_on_farm: value })}
+        >
+          <option value="true">في المزرعة</option>
+          <option value="false">خارج المزرعة</option>
+          <option value="">الكل</option>
+        </SelectField>
+      </Toolbar>
 
       <div className="table-wrap">
         <table>
@@ -194,52 +219,48 @@ export default function AnimalsPage() {
             </tr>
           </thead>
           <tbody>
-            {loading && (
-              <tr>
-                <td colSpan={10} className="empty">جارٍ التحميل…</td>
-              </tr>
-            )}
-            {!loading && rows.length === 0 && (
-              <tr>
-                <td colSpan={10} className="empty">لا توجد نتائج</td>
-              </tr>
-            )}
-            {rows.map((animal) => (
-              <tr key={animal.id}>
-                <td>
-                  <Link href={`/animals/${animal.id}`} style={{ fontWeight: 700, color: "var(--color-primary)" }}>
-                    {animal.tag}
-                  </Link>
-                </td>
-                <td>{animal.name || "—"}</td>
-                <td>
-                  {animal.branch_name ? (
-                    <span className="badge badge-muted">{animal.branch_name}</span>
-                  ) : (
-                    <span className="muted">غير محدد</span>
-                  )}
-                </td>
-                <td>{animal.type_name}</td>
-                <td>{animal.breed_name || "—"}</td>
-                <td>{SEX_LABEL[animal.sex] ?? animal.sex}</td>
-                <td>{formatDate(animal.birth_date)}</td>
-                <td>
-                  <span
-                    className={`badge ${
-                      animal.status_code === "dead"
-                        ? "badge-danger"
-                        : animal.status_code === "sold"
-                        ? "badge-muted"
-                        : ""
-                    }`}
-                  >
-                    {animal.status_name}
-                  </span>
-                </td>
-                <td>{animal.location_name || "—"}</td>
-                <td className="num">{animal.current_weight ? `${Number(animal.current_weight)} كغ` : "—"}</td>
-              </tr>
-            ))}
+            <TableMessage
+              colSpan={10}
+              loading={loading}
+              empty={rows.length === 0}
+              emptyTitle={filtered ? "لا نتائج مطابقة" : "لا حيوانات بعد"}
+              emptyText={
+                filtered
+                  ? "جرّب توسيع الفلاتر أو امسح كلمة البحث."
+                  : "أضف أول حيوان، أو سجّل عملية شراء لتدخل الحيوانات مع قيدها المالي."
+              }
+            />
+            {!loading &&
+              rows.map((animal) => (
+                <tr key={animal.id}>
+                  <td>
+                    <Link href={`/animals/${animal.id}`} className="link num">
+                      {animal.tag}
+                    </Link>
+                  </td>
+                  <td>{animal.name || "—"}</td>
+                  <td>
+                    {animal.branch_name ? (
+                      <span className="badge badge-muted">{animal.branch_name}</span>
+                    ) : (
+                      <span className="muted">غير محدد</span>
+                    )}
+                  </td>
+                  <td>{animal.type_name}</td>
+                  <td>{animal.breed_name || "—"}</td>
+                  <td>{SEX_LABEL[animal.sex] ?? animal.sex}</td>
+                  <td className="num">{formatDate(animal.birth_date)}</td>
+                  <td>
+                    <span className={`badge ${STATUS_TONE[animal.status_code] ?? ""}`}>
+                      {animal.status_name}
+                    </span>
+                  </td>
+                  <td>{animal.location_name || "—"}</td>
+                  <td className="num">
+                    {animal.current_weight ? `${Number(animal.current_weight)} كغ` : "—"}
+                  </td>
+                </tr>
+              ))}
           </tbody>
         </table>
       </div>
@@ -281,9 +302,8 @@ function AnimalForm({
     }));
   }, [byType]);
 
-  // Each branch counts from one, so the suggestion has to know which branch
-  // the animal is joining. Switching branch replaces the suggested number but
-  // never a number the user typed themselves.
+  // كل فرع يعدّ من واحد، فالاقتراح يحتاج أن يعرف الفرع الذي ينضم إليه
+  // الحيوان. تغيير الفرع يستبدل الرقم المقترح، ولا يمسّ رقمًا كتبه المستخدم.
   useEffect(() => {
     if (!form.animal_type) return;
     const params = new URLSearchParams({ animal_type: form.animal_type });
@@ -321,9 +341,14 @@ function AnimalForm({
   }
 
   return (
-    <form className="card" style={{ marginBottom: 16 }} onSubmit={submit}>
-      <div className="card-title">حيوان جديد</div>
-      {error && <div className="alert alert-error">{error}</div>}
+    <form className="card mb-4" onSubmit={submit}>
+      <div className="card-title">
+        <span className="inline">
+          <Icon name="plus" size={17} className="muted" />
+          حيوان جديد
+        </span>
+      </div>
+      <ErrorNote message={error} />
       <div className="row">
         <div className="field">
           <label>رقم الحيوان</label>
@@ -338,15 +363,23 @@ function AnimalForm({
           <select value={form.branch} onChange={(e) => setForm({ ...form, branch: e.target.value })}>
             <option value="">—</option>
             {(byType["branch"] ?? []).map((item) => (
-              <option key={item.id} value={item.id}>{item.display_name}</option>
+              <option key={item.id} value={item.id}>
+                {item.display_name}
+              </option>
             ))}
           </select>
         </div>
         <div className="field">
           <label>النوع</label>
-          <select value={form.animal_type} onChange={(e) => setForm({ ...form, animal_type: e.target.value })} required>
+          <select
+            value={form.animal_type}
+            onChange={(e) => setForm({ ...form, animal_type: e.target.value })}
+            required
+          >
             {(byType["animal_type"] ?? []).map((item) => (
-              <option key={item.id} value={item.id}>{item.display_name}</option>
+              <option key={item.id} value={item.id}>
+                {item.display_name}
+              </option>
             ))}
           </select>
         </div>
@@ -355,7 +388,9 @@ function AnimalForm({
           <select value={form.breed} onChange={(e) => setForm({ ...form, breed: e.target.value })}>
             <option value="">—</option>
             {(byType["breed"] ?? []).map((item) => (
-              <option key={item.id} value={item.id}>{item.display_name}</option>
+              <option key={item.id} value={item.id}>
+                {item.display_name}
+              </option>
             ))}
           </select>
         </div>
@@ -369,13 +404,23 @@ function AnimalForm({
         </div>
         <div className="field">
           <label>تاريخ الميلاد</label>
-          <input type="date" value={form.birth_date} onChange={(e) => setForm({ ...form, birth_date: e.target.value })} />
+          <input
+            type="date"
+            value={form.birth_date}
+            onChange={(e) => setForm({ ...form, birth_date: e.target.value })}
+          />
         </div>
         <div className="field">
           <label>الحالة</label>
-          <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} required>
+          <select
+            value={form.status}
+            onChange={(e) => setForm({ ...form, status: e.target.value })}
+            required
+          >
             {(byType["animal_status"] ?? []).map((item) => (
-              <option key={item.id} value={item.id}>{item.display_name}</option>
+              <option key={item.id} value={item.id}>
+                {item.display_name}
+              </option>
             ))}
           </select>
         </div>
@@ -384,12 +429,18 @@ function AnimalForm({
           <select value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })}>
             <option value="">—</option>
             {(byType["location"] ?? []).map((item) => (
-              <option key={item.id} value={item.id}>{item.display_name}</option>
+              <option key={item.id} value={item.id}>
+                {item.display_name}
+              </option>
             ))}
           </select>
         </div>
       </div>
-      <button className="btn" disabled={busy}>{busy ? "جارٍ الحفظ…" : "حفظ"}</button>
+      <div className="form-actions">
+        <Button icon="check" busy={busy}>
+          {busy ? "جارٍ الحفظ…" : "حفظ الحيوان"}
+        </Button>
+      </div>
     </form>
   );
 }

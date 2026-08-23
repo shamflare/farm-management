@@ -3,6 +3,14 @@
 import { useEffect, useState } from "react";
 import { api, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
+import Icon from "@/components/Icon";
+import {
+  Button,
+  EmptyState,
+  ErrorNote,
+  PageHeader,
+  SuccessNote,
+} from "@/components/ui";
 
 type Account = { id: string; code: string; display_name: string; type: string; is_cash: boolean };
 type Party = { id: string; name: string; kind: string };
@@ -22,7 +30,7 @@ const today = () => new Date().toISOString().slice(0, 10);
  * match by hand.
  */
 export default function OpeningBalancesPage() {
-  const { can, currency } = useApp();
+  const { can, currency, me } = useApp();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [partners, setPartners] = useState<Party[]>([]);
   const [date, setDate] = useState(today());
@@ -75,37 +83,46 @@ export default function OpeningBalancesPage() {
   }
 
   if (!can("settings.edit")) {
-    return <div className="alert alert-error">هذه الشاشة تحتاج صلاحية تعديل الإعدادات</div>;
+    return (
+      <EmptyState
+        icon="lock"
+        title="هذه الشاشة تحتاج صلاحية تعديل الإعدادات"
+        text="اطلب من صاحب المزرعة منحك صلاحية settings.edit من شاشة المستخدمين والصلاحيات."
+      />
+    );
   }
 
   return (
     <form onSubmit={submit}>
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">الرصيد الافتتاحي</h1>
-          <p className="page-sub">
-            ما تملكه المزرعة وما عليها يوم بدأت استخدام النظام · يُسجَّل قيدًا واحدًا متوازنًا
-          </p>
-        </div>
-        <button className="btn" disabled={busy}>{busy ? "جارٍ الترحيل…" : "ترحيل الرصيد الافتتاحي"}</button>
+      <PageHeader
+        title="الرصيد الافتتاحي"
+        subtitle="ما تملكه المزرعة وما عليها يوم بدأت استخدام النظام · يُسجَّل قيدًا واحدًا متوازنًا"
+        farm={me?.farm?.name}
+      >
+        <Button icon="check" busy={busy}>
+          {busy ? "جارٍ الترحيل…" : "ترحيل الرصيد الافتتاحي"}
+        </Button>
+      </PageHeader>
+
+      <ErrorNote message={error} />
+      <SuccessNote message={done} />
+
+      <div className="alert alert-info">
+        <Icon name="info" />
+        <span>
+          يُرحَّل مرة واحدة عند بدء الاستخدام. الفرق بين الأصول والالتزامات (
+          {money(equity, currency)}) هو حقوق الملكية، وما لا تنسبه لشريك (
+          {money(unassigned, currency)}) يُسجَّل في حساب «رصيد افتتاحي».
+        </span>
       </div>
 
-      {error && <div className="alert alert-error">{error}</div>}
-      {done && <div className="alert alert-ok">{done}</div>}
-
-      <div className="alert alert-ok" style={{ marginBottom: 16 }}>
-        يُرحَّل مرة واحدة عند بدء الاستخدام. الفرق بين الأصول والالتزامات
-        ({money(equity, currency)}) هو حقوق الملكية، وما لا تنسبه لشريك
-        ({money(unassigned, currency)}) يُسجَّل في حساب «رصيد افتتاحي».
-      </div>
-
-      <div className="card" style={{ marginBottom: 16 }}>
+      <div className="card mb-4">
         <div className="row">
           <div className="field">
             <label>تاريخ بدء الاستخدام</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
           </div>
-          <div className="field" style={{ flex: "3 1 300px" }}>
+          <div className="field row-wide">
             <label>البيان</label>
             <input value={memo} onChange={(e) => setMemo(e.target.value)} />
           </div>
@@ -133,65 +150,85 @@ export default function OpeningBalancesPage() {
         />
       </div>
 
-      <div className="card" style={{ marginTop: 16 }}>
+      <div className="card mt-4">
         <div className="card-title">
-          <span>رأس مال الشركاء</span>
-          <span className="num">{money(totalCapital, currency)}</span>
+          <span className="inline">
+            <Icon name="users" size={17} className="muted" />
+            رأس مال الشركاء
+          </span>
+          <span className="badge">{money(totalCapital, currency)}</span>
         </div>
-        {partners.length === 0 && (
-          <div className="empty">لا يوجد شركاء مسجلون — أضفهم من شاشة الأشخاص والحسابات</div>
-        )}
-        {capital.map((row, index) => (
-          <div className="row" key={index} style={{ marginBottom: 8 }}>
-            <div className="field" style={{ margin: 0, flex: "2 1 240px" }}>
-              <label>الشريك</label>
-              <select
-                value={row.party}
-                onChange={(e) => {
-                  const next = [...capital];
-                  next[index] = { ...row, party: e.target.value };
-                  setCapital(next);
-                }}
-              >
-                <option value="">اختر…</option>
-                {partners.map((partner) => (
-                  <option key={partner.id} value={partner.id}>{partner.name}</option>
-                ))}
-              </select>
+
+        {partners.length === 0 ? (
+          <EmptyState
+            icon="users"
+            title="لا يوجد شركاء مسجلون"
+            text="أضفهم أولًا من شاشة «الأشخاص والحسابات»، ثم عُد لتوزيع رأس المال الافتتاحي عليهم."
+          />
+        ) : (
+          <>
+            <div className="stack">
+              {capital.map((row, index) => (
+                <div className="row" key={index}>
+                  <div className="field row-wide">
+                    <label>الشريك</label>
+                    <select
+                      value={row.party}
+                      onChange={(e) => {
+                        const next = [...capital];
+                        next[index] = { ...row, party: e.target.value };
+                        setCapital(next);
+                      }}
+                    >
+                      <option value="">اختر…</option>
+                      {partners.map((partner) => (
+                        <option key={partner.id} value={partner.id}>
+                          {partner.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label>حصته من رأس المال</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={row.amount}
+                      onChange={(e) => {
+                        const next = [...capital];
+                        next[index] = { ...row, amount: e.target.value };
+                        setCapital(next);
+                      }}
+                    />
+                  </div>
+                  <div style={{ flex: "0 0 auto" }}>
+                    <button
+                      type="button"
+                      className="icon-btn bordered"
+                      title="حذف السطر"
+                      aria-label="حذف السطر"
+                      onClick={() => setCapital(capital.filter((_, i) => i !== index))}
+                    >
+                      <Icon name="trash" size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="field" style={{ margin: 0 }}>
-              <label>حصته من رأس المال</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={row.amount}
-                onChange={(e) => {
-                  const next = [...capital];
-                  next[index] = { ...row, amount: e.target.value };
-                  setCapital(next);
-                }}
-              />
-            </div>
-            <div style={{ alignSelf: "end" }}>
-              <button
+
+            <div className="form-actions">
+              <Button
                 type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={() => setCapital(capital.filter((_, i) => i !== index))}
+                variant="ghost"
+                size="sm"
+                icon="plus"
+                onClick={() => setCapital([...capital, { party: "", amount: "" }])}
               >
-                حذف
-              </button>
+                شريك آخر
+              </Button>
             </div>
-          </div>
-        ))}
-        {partners.length > 0 && (
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={() => setCapital([...capital, { party: "", amount: "" }])}
-          >
-            + شريك
-          </button>
+          </>
         )}
       </div>
     </form>
@@ -225,13 +262,14 @@ function RowEditor({
     <div className="card">
       <div className="card-title">
         <span>{title}</span>
-        <span className="num">{money(total, currency)}</span>
+        <span className="badge">{money(total, currency)}</span>
       </div>
-      <p className="page-sub" style={{ marginBottom: 12 }}>{hint}</p>
+      <p className="page-sub mb-4">{hint}</p>
 
+      <div className="stack">
       {rows.map((row, index) => (
-        <div className="row" key={index} style={{ marginBottom: 8 }}>
-          <div className="field" style={{ margin: 0, flex: "2 1 200px" }}>
+        <div className="row" key={index}>
+          <div className="field row-wide">
             <label>الحساب</label>
             <select value={row.account} onChange={(e) => update(index, { account: e.target.value })}>
               <option value="">اختر…</option>
@@ -242,7 +280,7 @@ function RowEditor({
               ))}
             </select>
           </div>
-          <div className="field" style={{ margin: 0 }}>
+          <div className="field">
             <label>المبلغ</label>
             <input
               type="number"
@@ -252,29 +290,36 @@ function RowEditor({
               onChange={(e) => update(index, { amount: e.target.value })}
             />
           </div>
-          <div className="field" style={{ margin: 0 }}>
+          <div className="field">
             <label>بيان</label>
             <input value={row.memo} onChange={(e) => update(index, { memo: e.target.value })} />
           </div>
-          <div style={{ alignSelf: "end" }}>
+          <div style={{ flex: "0 0 auto" }}>
             <button
               type="button"
-              className="btn btn-ghost btn-sm"
+              className="icon-btn bordered"
+              title="حذف السطر"
+              aria-label="حذف السطر"
               onClick={() => setRows(rows.filter((_, i) => i !== index))}
             >
-              حذف
+              <Icon name="trash" size={16} />
             </button>
           </div>
         </div>
       ))}
+      </div>
 
-      <button
-        type="button"
-        className="btn btn-ghost btn-sm"
-        onClick={() => setRows([...rows, { account: "", amount: "", memo: "" }])}
-      >
-        + سطر
-      </button>
+      <div className="form-actions">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          icon="plus"
+          onClick={() => setRows([...rows, { account: "", amount: "", memo: "" }])}
+        >
+          سطر آخر
+        </Button>
+      </div>
     </div>
   );
 }

@@ -3,6 +3,17 @@
 import { useEffect, useState } from "react";
 import { api, download, formatDate, formatNumber, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
+import Icon from "@/components/Icon";
+import {
+  Button,
+  ErrorNote,
+  ExportButton,
+  PageHeader,
+  Stat,
+  TableCard,
+  TableMessage,
+  Tabs,
+} from "@/components/ui";
 
 type Catalog = { id: string; code: string; display_name: string; type: string };
 type Production = {
@@ -49,13 +60,15 @@ const PERIODS = [
   { key: "month", label: "هذا الشهر" },
   { key: "year", label: "هذه السنة" },
   { key: "all", label: "كل الفترة" },
-];
+] as const;
+
+type Period = (typeof PERIODS)[number]["key"];
 
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function MilkPage() {
-  const { can, currency } = useApp();
-  const [period, setPeriod] = useState("month");
+  const { can, currency, me } = useApp();
+  const [period, setPeriod] = useState<Period>("month");
   const [summary, setSummary] = useState<Summary | null>(null);
   const [production, setProduction] = useState<Production[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -113,72 +126,69 @@ export default function MilkPage() {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">الحليب</h1>
-          <p className="page-sub">
-            الكمية اليومية تُسجَّل حتى لو لم تُبَع · المبيعات بند إيراد مستقل لفرع التربية
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          {can("reports.export") && (
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => download("/export/milk/").catch((err) => setError(err.message))}
-            >
-              ⬇ تصدير CSV
-            </button>
-          )}
-          <div className="tabs" style={{ margin: 0 }}>
-            {PERIODS.map((p) => (
-            <button key={p.key} className={`tab ${period === p.key ? "active" : ""}`} onClick={() => setPeriod(p.key)}>
-                {p.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        title="الحليب"
+        subtitle="الكمية اليومية تُسجَّل حتى لو لم تُبَع · المبيعات بند إيراد مستقل لفرع التربية"
+        farm={me?.farm?.name}
+      >
+        {can("reports.export") && (
+          <ExportButton
+            onClick={() => download("/export/milk/").catch((err) => setError(err.message))}
+          />
+        )}
+        <Tabs value={period} onChange={setPeriod} options={PERIODS as any} />
+      </PageHeader>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      <ErrorNote message={error} />
 
       {summary && (
-        <div className="grid grid-4" style={{ marginBottom: 16 }}>
-          <div className="card">
-            <div className="stat-label">الكمية المنتجة</div>
-            <div className="stat-value num">{formatNumber(summary.liters_produced, 1)} لتر</div>
-            <div className="stat-hint">{summary.days_recorded} يوم مسجّل</div>
-          </div>
-          <div className="card">
-            <div className="stat-label">المتوسط اليومي</div>
-            <div className="stat-value num">{formatNumber(summary.daily_average, 1)} لتر</div>
-          </div>
-          <div className="card">
-            <div className="stat-label">المباع</div>
-            <div className="stat-value num">{formatNumber(summary.liters_sold, 1)} لتر</div>
-            <div className="stat-hint">{money(summary.sales_value, currency)}</div>
-          </div>
-          <div className="card">
-            <div className="stat-label">لم يُبَع</div>
-            <div className="stat-value num">{formatNumber(summary.liters_kept, 1)} لتر</div>
-            <div className="stat-hint">استهلاك ذاتي أو تصنيع</div>
-          </div>
+        <div className="grid grid-4 mb-4">
+          <Stat
+            label="الكمية المنتجة"
+            value={`${formatNumber(summary.liters_produced, 1)} لتر`}
+            hint={`${summary.days_recorded} يوم مسجّل`}
+            icon="droplet"
+            tone="info"
+          />
+          <Stat
+            label="المتوسط اليومي"
+            value={`${formatNumber(summary.daily_average, 1)} لتر`}
+            hint="على الأيام المسجّلة وحدها"
+            icon="chart"
+          />
+          <Stat
+            label="المباع"
+            value={`${formatNumber(summary.liters_sold, 1)} لتر`}
+            hint={money(summary.sales_value, currency)}
+            icon="banknote"
+            tone="success"
+          />
+          <Stat
+            label="لم يُبَع"
+            value={`${formatNumber(summary.liters_kept, 1)} لتر`}
+            hint="استهلاك ذاتي أو تصنيع"
+            icon="inbox"
+            tone="accent"
+          />
         </div>
       )}
 
       {can("milk.create") && (
-        <div className="tabs">
-          <button
-            className={`tab ${openForm === "production" ? "active" : ""}`}
+        <div className="btn-row mb-4 no-print">
+          <Button
+            variant={openForm === "production" ? "primary" : "ghost"}
+            icon={openForm === "production" ? "close" : "droplet"}
             onClick={() => setOpenForm(openForm === "production" ? "" : "production")}
           >
             تسجيل حلبة
-          </button>
-          <button
-            className={`tab ${openForm === "sale" ? "active" : ""}`}
+          </Button>
+          <Button
+            variant={openForm === "sale" ? "primary" : "ghost"}
+            icon={openForm === "sale" ? "close" : "banknote"}
             onClick={() => setOpenForm(openForm === "sale" ? "" : "sale")}
           >
             بيع حليب أو مشتقات
-          </button>
+          </Button>
         </div>
       )}
 
@@ -198,72 +208,77 @@ export default function MilkPage() {
       )}
 
       {summary && summary.by_product.length > 0 && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <div className="card-title">المبيعات حسب المنتج</div>
-          <table>
-            <thead>
-              <tr><th>المنتج</th><th>الكمية</th><th>القيمة</th></tr>
-            </thead>
-            <tbody>
-              {summary.by_product.map((row) => (
-                <tr key={row.product}>
-                  <td>{row.product}</td>
-                  <td className="num">{formatNumber(row.quantity, 2)}</td>
-                  <td className="num" style={{ fontWeight: 600 }}>{money(row.value, currency)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="mb-4">
+          <TableCard title="المبيعات حسب المنتج">
+            <table>
+              <thead>
+                <tr><th>المنتج</th><th>الكمية</th><th>القيمة</th></tr>
+              </thead>
+              <tbody>
+                {summary.by_product.map((row) => (
+                  <tr key={row.product}>
+                    <td>{row.product}</td>
+                    <td className="num">{formatNumber(row.quantity, 2)}</td>
+                    <td className="num strong">{money(row.value, currency)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableCard>
         </div>
       )}
 
       <div className="grid grid-2">
-        <div className="card">
-          <div className="card-title">سجل الحلب</div>
+        <TableCard title="سجل الحلب">
           <table>
             <thead>
               <tr><th>التاريخ</th><th>الحلبة</th><th>اللترات</th><th>عدد الحلوبات</th></tr>
             </thead>
             <tbody>
+              <TableMessage
+                colSpan={4}
+                empty={production.length === 0}
+                emptyTitle="لا توجد سجلات حلب"
+                emptyText="سجّل كمية اليوم ولو لم يُبَع منها شيء — الفرق بين المنتج والمباع هو ما شربته المزرعة أو صنّعته."
+              />
               {production.map((row) => (
                 <tr key={row.id}>
-                  <td>{formatDate(row.happened_on)}</td>
+                  <td className="num">{formatDate(row.happened_on)}</td>
                   <td className="muted">{SESSION_LABEL[row.session] ?? row.session}</td>
-                  <td className="num" style={{ fontWeight: 600 }}>{formatNumber(row.liters, 1)}</td>
+                  <td className="num strong">{formatNumber(row.liters, 1)}</td>
                   <td className="num muted">{row.milking_animals ?? "—"}</td>
                 </tr>
               ))}
-              {production.length === 0 && (
-                <tr><td colSpan={4} className="empty">لا توجد سجلات</td></tr>
-              )}
             </tbody>
           </table>
-        </div>
+        </TableCard>
 
-        <div className="card">
-          <div className="card-title">مبيعات الحليب ومشتقاته</div>
+        <TableCard title="مبيعات الحليب ومشتقاته">
           <table>
             <thead>
               <tr><th>التاريخ</th><th>المنتج</th><th>الكمية</th><th>القيمة</th><th>الزبون</th></tr>
             </thead>
             <tbody>
+              <TableMessage
+                colSpan={5}
+                empty={sales.length === 0}
+                emptyTitle="لا توجد مبيعات"
+                emptyText="بيع الحليب ومشتقاته يُسجَّل من الزر أعلاه ويُرحَّل إيرادًا لفرع التربية."
+              />
               {sales.map((row) => (
                 <tr key={row.id}>
-                  <td>{formatDate(row.happened_on)}</td>
+                  <td className="num">{formatDate(row.happened_on)}</td>
                   <td>{row.product_name}</td>
                   <td className="num">
                     {formatNumber(row.quantity, 2)} {row.unit_name}
                   </td>
-                  <td className="num" style={{ fontWeight: 600 }}>{money(row.total_price, currency)}</td>
+                  <td className="num strong">{money(row.total_price, currency)}</td>
                   <td className="muted">{row.customer_name || "—"}</td>
                 </tr>
               ))}
-              {sales.length === 0 && (
-                <tr><td colSpan={5} className="empty">لا توجد مبيعات</td></tr>
-              )}
             </tbody>
           </table>
-        </div>
+        </TableCard>
       </div>
     </>
   );
@@ -312,12 +327,17 @@ function ProductionForm({
   }
 
   return (
-    <form className="card" style={{ marginBottom: 16 }} onSubmit={submit}>
-      <div className="card-title">تسجيل كمية الحلب</div>
-      <p className="page-sub" style={{ marginBottom: 12 }}>
+    <form className="card mb-4" onSubmit={submit}>
+      <div className="card-title">
+        <span className="inline">
+          <Icon name="droplet" size={17} className="muted" />
+          تسجيل كمية الحلب
+        </span>
+      </div>
+      <p className="page-sub mb-4">
         تسجيل نفس اليوم ونفس الحلبة مرة أخرى يصحّح الرقم ولا يضاعفه.
       </p>
-      {error && <div className="alert alert-error">{error}</div>}
+      <ErrorNote message={error} />
       <div className="row">
         <div className="field">
           <label>التاريخ</label>
@@ -353,7 +373,11 @@ function ProductionForm({
           <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
         </div>
       </div>
-      <button className="btn" disabled={busy}>{busy ? "جارٍ الحفظ…" : "حفظ"}</button>
+      <div className="form-actions">
+        <Button icon="check" busy={busy}>
+          {busy ? "جارٍ الحفظ…" : "حفظ الحلبة"}
+        </Button>
+      </div>
     </form>
   );
 }
@@ -421,9 +445,14 @@ function SaleForm({
   }
 
   return (
-    <form className="card" style={{ marginBottom: 16 }} onSubmit={submit}>
-      <div className="card-title">بيع حليب أو مشتقات</div>
-      {error && <div className="alert alert-error">{error}</div>}
+    <form className="card mb-4" onSubmit={submit}>
+      <div className="card-title">
+        <span className="inline">
+          <Icon name="banknote" size={17} className="muted" />
+          بيع حليب أو مشتقات
+        </span>
+      </div>
+      <ErrorNote message={error} />
       <div className="row">
         <div className="field">
           <label>التاريخ</label>
@@ -485,7 +514,11 @@ function SaleForm({
           <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
         </div>
       </div>
-      <button className="btn" disabled={busy}>{busy ? "جارٍ الحفظ…" : "حفظ البيع"}</button>
+      <div className="form-actions">
+        <Button icon="check" busy={busy}>
+          {busy ? "جارٍ الحفظ…" : "حفظ البيع"}
+        </Button>
+      </div>
     </form>
   );
 }

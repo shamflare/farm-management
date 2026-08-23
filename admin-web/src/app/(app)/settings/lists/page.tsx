@@ -3,6 +3,15 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
+import Icon from "@/components/Icon";
+import {
+  Button,
+  ErrorNote,
+  PageHeader,
+  SuccessNote,
+  TableMessage,
+  Tabs,
+} from "@/components/ui";
 
 type CatalogType = { code: string; name: string; name_ar: string; allows_children: boolean };
 type Item = {
@@ -21,7 +30,7 @@ type Item = {
 type Page<T> = { count: number; results: T[] };
 
 export default function ListsPage() {
-  const { can } = useApp();
+  const { can, me } = useApp();
   const [types, setTypes] = useState<CatalogType[]>([]);
   const [active, setActive] = useState("expense_category");
   const [items, setItems] = useState<Item[]>([]);
@@ -94,28 +103,23 @@ export default function ListsPage() {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">القوائم والبنود</h1>
-          <p className="page-sub">
-            كل قائمة في النظام تُدار من هنا — لا شيء مكتوب داخل الكود
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="القوائم والبنود"
+        subtitle="كل قائمة في النظام تُدار من هنا — لا شيء مكتوب داخل الكود"
+        farm={me?.farm?.name}
+      />
 
-      {error && <div className="alert alert-error">{error}</div>}
-      {notice && <div className="alert alert-ok">{notice}</div>}
+      <ErrorNote message={error} />
+      <SuccessNote message={notice} />
 
-      <div className="tabs">
-        {types.map((type) => (
-          <button key={type.code} className={`tab ${active === type.code ? "active" : ""}`} onClick={() => setActive(type.code)}>
-            {type.name_ar || type.name}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        value={active}
+        onChange={setActive}
+        options={types.map((type) => ({ key: type.code, label: type.name_ar || type.name }))}
+      />
 
       {!readOnly && (
-        <form className="card" style={{ marginBottom: 16 }} onSubmit={addItem}>
+        <form className="card mb-4" onSubmit={addItem}>
           <div className="row">
             <div className="field">
               <label>بند جديد في «{currentType?.name_ar}»</label>
@@ -132,9 +136,8 @@ export default function ListsPage() {
                 </select>
               </div>
             )}
-            <div className="field" style={{ flex: "0 0 auto" }}>
-              <label>&nbsp;</label>
-              <button className="btn">إضافة</button>
+            <div style={{ flex: "0 0 auto" }}>
+              <Button icon="plus">إضافة</Button>
             </div>
           </div>
         </form>
@@ -147,50 +150,86 @@ export default function ListsPage() {
               <th>الاسم</th>
               <th>الرمز</th>
               <th>الحالة</th>
-              <th></th>
+              <th className="cell-actions" />
             </tr>
           </thead>
           <tbody>
-            {tree.length === 0 && <tr><td colSpan={4} className="empty">لا توجد بنود</td></tr>}
+            <TableMessage
+              colSpan={4}
+              empty={tree.length === 0}
+              emptyTitle="لا توجد بنود في هذه القائمة"
+              emptyText="أضف أول بند من النموذج أعلاه؛ العمليات ترتبط بالسجل لا بالاسم، فتغيير الاسم لاحقًا لا يفسد الماضي."
+            />
             {tree.map(({ root, children }) => (
               <Fragment key={root.id}>
                 <tr>
-                  <td style={{ fontWeight: 600 }}>{root.display_name}</td>
+                  <td className="strong">{root.display_name}</td>
                   <td className="muted num">{root.code}</td>
                   <td>
-                    <span className={`badge ${root.is_active ? "" : "badge-muted"}`}>
-                      {root.is_active ? "مفعّل" : "معطّل"}
+                    <span className="inline" style={{ gap: "var(--s1)" }}>
+                      <span className={`badge ${root.is_active ? "badge-success" : "badge-muted"}`}>
+                        {root.is_active ? "مفعّل" : "معطّل"}
+                      </span>
+                      {root.is_system && <span className="badge badge-muted">افتراضي</span>}
                     </span>
-                    {root.is_system && <span className="badge badge-muted" style={{ marginInlineStart: 6 }}>افتراضي</span>}
                   </td>
-                  <td>
+                  <td className="cell-actions">
                     {!readOnly && (
-                      <>
-                        <button className="btn btn-sm btn-ghost" onClick={() => rename(root)}>تعديل الاسم</button>{" "}
-                        <button className="btn btn-sm btn-ghost" onClick={() => toggle(root)}>
-                          {root.is_active ? "تعطيل" : "تفعيل"}
+                      <span className="cell-actions-group">
+                        <button
+                          className="icon-btn"
+                          title="تعديل الاسم"
+                          aria-label="تعديل الاسم"
+                          onClick={() => rename(root)}
+                        >
+                          <Icon name="edit" size={16} />
                         </button>
-                      </>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          icon={root.is_active ? "lock" : "check"}
+                          onClick={() => toggle(root)}
+                        >
+                          {root.is_active ? "تعطيل" : "تفعيل"}
+                        </Button>
+                      </span>
                     )}
                   </td>
                 </tr>
                 {children.map((child) => (
                   <tr key={child.id}>
-                    <td style={{ paddingInlineStart: 36 }} className="muted">↳ {child.display_name}</td>
+                    <td className="muted" style={{ paddingInlineStart: 40 }}>
+                      <span className="inline" style={{ gap: "var(--s2)" }}>
+                        <Icon name="chevronStart" size={13} />
+                        {child.display_name}
+                      </span>
+                    </td>
                     <td className="muted num">{child.code}</td>
                     <td>
-                      <span className={`badge ${child.is_active ? "" : "badge-muted"}`}>
+                      <span className={`badge ${child.is_active ? "badge-success" : "badge-muted"}`}>
                         {child.is_active ? "مفعّل" : "معطّل"}
                       </span>
                     </td>
-                    <td>
+                    <td className="cell-actions">
                       {!readOnly && (
-                        <>
-                          <button className="btn btn-sm btn-ghost" onClick={() => rename(child)}>تعديل الاسم</button>{" "}
-                          <button className="btn btn-sm btn-ghost" onClick={() => toggle(child)}>
-                            {child.is_active ? "تعطيل" : "تفعيل"}
+                        <span className="cell-actions-group">
+                          <button
+                            className="icon-btn"
+                            title="تعديل الاسم"
+                            aria-label="تعديل الاسم"
+                            onClick={() => rename(child)}
+                          >
+                            <Icon name="edit" size={16} />
                           </button>
-                        </>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            icon={child.is_active ? "lock" : "check"}
+                            onClick={() => toggle(child)}
+                          >
+                            {child.is_active ? "تعطيل" : "تفعيل"}
+                          </Button>
+                        </span>
                       )}
                     </td>
                   </tr>

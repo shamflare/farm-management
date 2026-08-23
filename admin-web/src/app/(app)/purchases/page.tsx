@@ -5,6 +5,15 @@ import Link from "next/link";
 import { api, download, formatDate, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 import Attachments from "@/components/Attachments";
+import Icon from "@/components/Icon";
+import {
+  Button,
+  ErrorNote,
+  PageHeader,
+  Stat,
+  SuccessNote,
+  TableMessage,
+} from "@/components/ui";
 
 type Catalog = { id: string; code: string; display_name: string; type: string };
 type Account = { id: string; display_name: string; is_cash: boolean };
@@ -40,7 +49,7 @@ type Line = { tag: string; name: string; sex: string; unit_price: string; birth_
 const emptyLine = (): Line => ({ tag: "", name: "", sex: "male", unit_price: "", birth_date: "" });
 
 export default function PurchasesPage() {
-  const { can, currency } = useApp();
+  const { can, currency, me } = useApp();
   const [rows, setRows] = useState<Purchase[]>([]);
   const [catalog, setCatalog] = useState<Catalog[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -86,22 +95,24 @@ export default function PurchasesPage() {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">شراء الحيوانات</h1>
-          <p className="page-sub">
-            النقل والعمولة تُحمَّل على قيمة الحيوانات، فيحمل كل حيوان تكلفته الحقيقية
-          </p>
-        </div>
+      <PageHeader
+        title="شراء الحيوانات"
+        subtitle="النقل والعمولة تُحمَّل على قيمة الحيوانات، فيحمل كل حيوان تكلفته الحقيقية"
+        farm={me?.farm?.name}
+      >
         {can("purchases.create") && (
-          <button className="btn" onClick={() => setShowForm((v) => !v)}>
-            {showForm ? "إغلاق" : "+ عملية شراء"}
-          </button>
+          <Button
+            icon={showForm ? "close" : "plus"}
+            variant={showForm ? "ghost" : "primary"}
+            onClick={() => setShowForm((v) => !v)}
+          >
+            {showForm ? "إغلاق النموذج" : "عملية شراء"}
+          </Button>
         )}
-      </div>
+      </PageHeader>
 
-      {error && <div className="alert alert-error">{error}</div>}
-      {notice && <div className="alert alert-ok">{notice}</div>}
+      <ErrorNote message={error} />
+      <SuccessNote message={notice} />
 
       {showForm && (
         <PurchaseForm
@@ -117,19 +128,17 @@ export default function PurchasesPage() {
         />
       )}
 
-      <div className="grid grid-3" style={{ marginBottom: 16 }}>
-        <div className="card">
-          <div className="stat-label">عدد العمليات</div>
-          <div className="stat-value num">{rows.length}</div>
-        </div>
-        <div className="card">
-          <div className="stat-label">إجمالي المشتريات</div>
-          <div className="stat-value num">{money(total, currency)}</div>
-        </div>
-        <div className="card">
-          <div className="stat-label">المتبقي على المزرعة</div>
-          <div className={`stat-value num ${owed > 0 ? "negative" : ""}`}>{money(owed, currency)}</div>
-        </div>
+      <div className="grid grid-3 mb-4">
+        <Stat label="عدد العمليات" value={rows.length} icon="cart" />
+        <Stat label="إجمالي المشتريات" value={money(total, currency)} icon="coins" tone="info" />
+        <Stat
+          label="المتبقي على المزرعة"
+          value={money(owed, currency)}
+          valueTone={owed > 0 ? "negative" : undefined}
+          icon="arrowStart"
+          tone={owed > 0 ? "danger" : "success"}
+          hint={owed > 0 ? "ذمم للموردين لم تُسدَّد بعد" : "لا متبقٍّ على المزرعة"}
+        />
       </div>
 
       <div className="table-wrap">
@@ -144,18 +153,22 @@ export default function PurchasesPage() {
               <th>الإجمالي</th>
               <th>المدفوع</th>
               <th>الحالة</th>
-              <th></th>
+              <th className="cell-actions" />
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan={9} className="empty">جارٍ التحميل…</td></tr>}
-            {!loading && rows.length === 0 && (
-              <tr><td colSpan={9} className="empty">لا توجد عمليات شراء</td></tr>
-            )}
-            {rows.map((row) => (
+            <TableMessage
+              colSpan={9}
+              loading={loading}
+              empty={rows.length === 0}
+              emptyTitle="لا توجد عمليات شراء"
+              emptyText="سجّل أول عملية شراء؛ الحيوانات تُنشأ بأرقامها والقيد المالي يُرحَّل معها في خطوة واحدة."
+            />
+            {!loading &&
+              rows.map((row) => (
               <Fragment key={row.id}>
                 <tr>
-                  <td>{formatDate(row.happened_on)}</td>
+                  <td className="num">{formatDate(row.happened_on)}</td>
                   <td>{row.supplier_name || "—"}</td>
                   <td className="num">{row.items.length}</td>
                   <td className="num">{money(row.animals_price, currency)}</td>
@@ -165,26 +178,32 @@ export default function PurchasesPage() {
                       currency
                     )}
                   </td>
-                  <td className="num" style={{ fontWeight: 700 }}>{money(row.total_cost, currency)}</td>
+                  <td className="num strong">{money(row.total_cost, currency)}</td>
                   <td className="num">{money(row.paid_amount, currency)}</td>
                   <td>
-                    <span className={`badge ${row.settlement_status === "paid" ? "" : "badge-warning"}`}>
+                    <span
+                      className={`badge ${
+                        row.settlement_status === "paid" ? "badge-success" : "badge-warning"
+                      }`}
+                    >
                       {SETTLEMENT[row.settlement_status] ?? row.settlement_status}
                     </span>
                   </td>
-                  <td>
-                    <button
-                      className="btn btn-ghost btn-sm"
+                  <td className="cell-actions">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      icon={expanded === row.id ? "chevronUp" : "chevronDown"}
                       onClick={() => setExpanded(expanded === row.id ? "" : row.id)}
                     >
                       {expanded === row.id ? "إخفاء" : "الحيوانات"}
-                    </button>
+                    </Button>
                   </td>
                 </tr>
                 {expanded === row.id && (
                   <tr>
-                    <td colSpan={9} style={{ background: "var(--color-bg)" }}>
-                      <table>
+                    <td colSpan={9} className="subtable-cell">
+                      <table className="subtable">
                         <thead>
                           <tr><th>الحيوان</th><th>سعر الوحدة</th><th>التكلفة المحمَّلة</th></tr>
                         </thead>
@@ -192,27 +211,27 @@ export default function PurchasesPage() {
                           {row.items.map((item) => (
                             <tr key={item.id}>
                               <td>
-                                <Link href={`/animals/${item.animal}`} style={{ color: "var(--color-primary)" }}>
+                                <Link href={`/animals/${item.animal}`} className="link num">
                                   {item.animal_tag}
                                 </Link>
                               </td>
                               <td className="num">{money(item.unit_price, currency)}</td>
-                              <td className="num" style={{ fontWeight: 600 }}>
-                                {money(item.allocated_cost, currency)}
-                              </td>
+                              <td className="num strong">{money(item.allocated_cost, currency)}</td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
-                      {row.notes && <div className="muted" style={{ padding: 8 }}>{row.notes}</div>}
-                      {can("attachments.view") && (
-                        <Attachments
-                          subjectType="purchase"
-                          subjectId={row.id}
-                          title="فاتورة الشراء والمستندات"
-                          allowPhoto={false}
-                        />
-                      )}
+                      <div style={{ padding: "var(--s4)" }}>
+                        {row.notes && <p className="muted text-sm mb-4">{row.notes}</p>}
+                        {can("attachments.view") && (
+                          <Attachments
+                            subjectType="purchase"
+                            subjectId={row.id}
+                            title="فاتورة الشراء والمستندات"
+                            allowPhoto={false}
+                          />
+                        )}
+                      </div>
                     </td>
                   </tr>
                 )}
@@ -317,12 +336,17 @@ function PurchaseForm({
   }
 
   return (
-    <form className="card" style={{ marginBottom: 16 }} onSubmit={submit}>
-      <div className="card-title">عملية شراء جديدة</div>
-      <p className="page-sub" style={{ marginBottom: 12 }}>
+    <form className="card mb-4" onSubmit={submit}>
+      <div className="card-title">
+        <span className="inline">
+          <Icon name="cart" size={17} className="muted" />
+          عملية شراء جديدة
+        </span>
+      </div>
+      <p className="page-sub mb-4">
         الحيوانات تُسجَّل تلقائيًا بأرقامها التالية في الفرع المختار. اترك الرقم فارغًا ليُرقَّم وحده.
       </p>
-      {error && <div className="alert alert-error">{error}</div>}
+      <ErrorNote message={error} />
 
       <div className="row">
         <div className="field">
@@ -370,65 +394,81 @@ function PurchaseForm({
         </div>
       </div>
 
-      <div className="stat-label" style={{ margin: "12px 0 8px" }}>الحيوانات ({lines.length})</div>
-      {lines.map((line, index) => (
-        <div className="row" key={index} style={{ marginBottom: 8 }}>
-          <div className="field" style={{ margin: 0 }}>
-            <label>الرقم</label>
-            <input
-              placeholder="تلقائي"
-              value={line.tag}
-              onChange={(e) => update(index, { tag: e.target.value })}
-            />
-          </div>
-          <div className="field" style={{ margin: 0 }}>
-            <label>الاسم</label>
-            <input value={line.name} onChange={(e) => update(index, { name: e.target.value })} />
-          </div>
-          <div className="field" style={{ margin: 0 }}>
-            <label>الجنس</label>
-            <select value={line.sex} onChange={(e) => update(index, { sex: e.target.value })}>
-              <option value="male">ذكر</option>
-              <option value="female">أنثى</option>
-              <option value="unknown">غير محدد</option>
-            </select>
-          </div>
-          <div className="field" style={{ margin: 0 }}>
-            <label>تاريخ الميلاد</label>
-            <input
-              type="date"
-              value={line.birth_date}
-              onChange={(e) => update(index, { birth_date: e.target.value })}
-            />
-          </div>
-          <div className="field" style={{ margin: 0 }}>
-            <label>سعر الشراء</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={line.unit_price}
-              onChange={(e) => update(index, { unit_price: e.target.value })}
-              required
-            />
-          </div>
-          <div style={{ alignSelf: "end" }}>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => setLines(lines.filter((_, i) => i !== index))}
-              disabled={lines.length === 1}
-            >
-              حذف
-            </button>
-          </div>
-        </div>
-      ))}
-      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setLines([...lines, emptyLine()])}>
-        + حيوان آخر
-      </button>
+      <div className="divider" />
+      <div className="section-title">الحيوانات ({lines.length})</div>
 
-      <div className="row" style={{ marginTop: 16 }}>
+      <div className="stack">
+        {lines.map((line, index) => (
+          <div className="row" key={index}>
+            <div className="field">
+              <label>الرقم</label>
+              <input
+                placeholder="تلقائي"
+                value={line.tag}
+                onChange={(e) => update(index, { tag: e.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label>الاسم</label>
+              <input value={line.name} onChange={(e) => update(index, { name: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>الجنس</label>
+              <select value={line.sex} onChange={(e) => update(index, { sex: e.target.value })}>
+                <option value="male">ذكر</option>
+                <option value="female">أنثى</option>
+                <option value="unknown">غير محدد</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>تاريخ الميلاد</label>
+              <input
+                type="date"
+                value={line.birth_date}
+                onChange={(e) => update(index, { birth_date: e.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label>سعر الشراء</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={line.unit_price}
+                onChange={(e) => update(index, { unit_price: e.target.value })}
+                required
+              />
+            </div>
+            <div style={{ flex: "0 0 auto" }}>
+              <button
+                type="button"
+                className="icon-btn bordered"
+                title="حذف السطر"
+                aria-label="حذف السطر"
+                onClick={() => setLines(lines.filter((_, i) => i !== index))}
+                disabled={lines.length === 1}
+              >
+                <Icon name="trash" size={16} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          icon="plus"
+          onClick={() => setLines([...lines, emptyLine()])}
+        >
+          حيوان آخر
+        </Button>
+      </div>
+
+      <div className="divider" />
+      <div className="row">
         <div className="field">
           <label>تكلفة النقل</label>
           <input
@@ -481,18 +521,25 @@ function PurchaseForm({
             onChange={(e) => setForm({ ...form, paid_amount: e.target.value })}
           />
         </div>
-        <div className="field" style={{ flex: "2 1 240px" }}>
+        <div className="field row-wide">
           <label>ملاحظات</label>
           <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
         </div>
       </div>
 
-      <div className="alert alert-ok" style={{ marginTop: 12 }}>
-        قيمة الحيوانات {money(animalsPrice, currency)} + مصاريف {money(extra, currency)} ={" "}
-        <strong>الإجمالي {money(total, currency)}</strong>
+      <div className="alert alert-info mt-5">
+        <Icon name="coins" />
+        <span>
+          قيمة الحيوانات {money(animalsPrice, currency)} + مصاريف {money(extra, currency)} ={" "}
+          <strong>الإجمالي {money(total, currency)}</strong>
+        </span>
       </div>
 
-      <button className="btn" disabled={busy}>{busy ? "جارٍ الحفظ…" : "تسجيل الشراء"}</button>
+      <div className="form-actions">
+        <Button icon="check" busy={busy}>
+          {busy ? "جارٍ الحفظ…" : "تسجيل الشراء"}
+        </Button>
+      </div>
     </form>
   );
 }

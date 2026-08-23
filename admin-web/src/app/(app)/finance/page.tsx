@@ -4,8 +4,26 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { api, download, formatDate, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import Icon from "@/components/Icon";
+import {
+  Button,
+  ErrorNote,
+  ExportButton,
+  InfoNote,
+  PageHeader,
+  SuccessNote,
+  TableMessage,
+  Tabs,
+} from "@/components/ui";
 
-type Account = { id: string; code: string; display_name: string; type: string; is_cash: boolean; balance: number };
+type Account = {
+  id: string;
+  code: string;
+  display_name: string;
+  type: string;
+  is_cash: boolean;
+  balance: number;
+};
 type Catalog = { id: string; code: string; display_name: string; type: string };
 type Party = { id: string; name: string; kind: string };
 type Line = { id: number; account_code: string; account_name: string; debit: string; credit: string };
@@ -46,12 +64,21 @@ const STATUS_LABEL: Record<string, string> = {
   void: "ملغى",
 };
 
+const STATUS_TONE: Record<string, string> = {
+  posted: "badge-success",
+  pending: "badge-warning",
+  rejected: "badge-danger",
+  void: "badge-muted",
+  draft: "badge-muted",
+};
+
 export default function FinancePage() {
-  const { can, currency } = useApp();
+  const { can, currency, me } = useApp();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [catalog, setCatalog] = useState<Catalog[]>([]);
   const [parties, setParties] = useState<Party[]>([]);
   const [entries, setEntries] = useState<Entry[]>([]);
+  const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [kind, setKind] = useState("");
   const [tab, setTab] = useState<"expense" | "income" | "transfer">("expense");
@@ -74,15 +101,20 @@ export default function FinancePage() {
   const branches = useMemo(() => catalog.filter((c) => c.type === "branch"), [catalog]);
 
   async function loadEntries() {
+    setLoading(true);
     const params = new URLSearchParams({ page_size: "40" });
     if (kind) params.set("kind", kind);
-    const data = await api.get<Page<Entry>>(`/entries/?${params}`);
-    setEntries(data.results);
+    try {
+      const data = await api.get<Page<Entry>>(`/entries/?${params}`);
+      setEntries(data.results);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
-    // A worker may record money without being allowed to read the books, so
-    // the pickers fall back to endpoints that carry names but no balances.
+    // قد يسجّل العامل مصروفًا دون أن يُسمح له بقراءة الدفتر، فتعود القوائم
+    // إلى نقاط تحمل الأسماء بلا أرصدة.
     const accountsCall = canReadBooks
       ? api.get<Page<Account>>("/accounts/?page_size=200").then((d) => d.results)
       : api.get<{ data: Account[] }>("/accounts/pickable/").then((d) => d.data);
@@ -101,7 +133,10 @@ export default function FinancePage() {
   }, []);
 
   useEffect(() => {
-    if (!canReadBooks) return;
+    if (!canReadBooks) {
+      setLoading(false);
+      return;
+    }
     loadEntries().catch((err) => setError(err.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kind, canReadBooks]);
@@ -164,41 +199,37 @@ export default function FinancePage() {
         />
       )}
 
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">المالية</h1>
-          <p className="page-sub">
-            {canReadBooks
-              ? "كل عملية هنا قيد مزدوج متوازن، ولا يمكن حذفها — تُعكس فقط"
-              : "سجّل ما صرفته؛ دفتر القيود والأرصدة يطّلع عليها من يملك صلاحية المالية"}
-          </p>
-        </div>
+      <PageHeader
+        title="الحركات المالية"
+        subtitle={
+          canReadBooks
+            ? "كل عملية هنا قيد مزدوج متوازن، ولا يمكن حذفها — تُعكس فقط"
+            : "سجّل ما صرفته؛ دفتر القيود والأرصدة يطّلع عليها من يملك صلاحية المالية"
+        }
+        farm={me?.farm?.name}
+      >
         {can("finance.export") && (
-          <button
-            className="btn btn-ghost"
+          <ExportButton
+            label="تصدير القيود"
             onClick={() => download("/export/entries/").catch((err) => setError(err.message))}
-          >
-            ⬇ تصدير القيود CSV
-          </button>
+          />
         )}
-      </div>
+      </PageHeader>
 
-      {error && <div className="alert alert-error">{error}</div>}
-      {notice && <div className="alert alert-ok">{notice}</div>}
+      <ErrorNote message={error} />
+      <SuccessNote message={notice} />
 
       {can("finance.create") && (
-        <div className="card" style={{ marginBottom: 20 }}>
-          <div className="tabs">
-            <button className={`tab ${tab === "expense" ? "active" : ""}`} onClick={() => setTab("expense")}>
-              تسجيل مصروف
-            </button>
-            <button className={`tab ${tab === "income" ? "active" : ""}`} onClick={() => setTab("income")}>
-              تسجيل إيراد
-            </button>
-            <button className={`tab ${tab === "transfer" ? "active" : ""}`} onClick={() => setTab("transfer")}>
-              تحويل بين الحسابات
-            </button>
-          </div>
+        <div className="card mb-5 no-print">
+          <Tabs
+            value={tab}
+            onChange={setTab}
+            options={[
+              { key: "expense", label: "تسجيل مصروف", icon: "arrowStart" },
+              { key: "income", label: "تسجيل إيراد", icon: "arrowEnd" },
+              { key: "transfer", label: "تحويل بين الحسابات", icon: "swap" },
+            ]}
+          />
 
           {tab === "expense" && (
             <ExpenseForm
@@ -240,105 +271,160 @@ export default function FinancePage() {
       )}
 
       {!canReadBooks && (
-        <p className="page-sub">
+        <InfoNote>
           العمليات التي تسجّلها تُحفظ باسمك في سجل التدقيق، ويراجعها صاحب المزرعة.
-        </p>
+        </InfoNote>
       )}
 
       {canReadBooks && (
-      <>
-      <div className="page-head" style={{ marginBottom: 12 }}>
-        <h2 style={{ fontSize: "1.15rem", fontWeight: 700 }}>دفتر القيود</h2>
-        <select value={kind} onChange={(e) => setKind(e.target.value)} style={{ padding: 8, borderRadius: "var(--radius)", border: "1px solid var(--color-border)" }}>
-          <option value="">كل الأنواع</option>
-          {Object.entries(KIND_LABEL).map(([key, label]) => (
-            <option key={key} value={key}>{label}</option>
-          ))}
-        </select>
-      </div>
+        <>
+          <div className="between mb-4">
+            <h2 className="section-title" style={{ marginBottom: 0 }}>
+              <Icon name="list" size={18} className="muted" />
+              دفتر القيود
+            </h2>
+            <div className="field no-print" style={{ marginBottom: 0, width: 200 }}>
+              <select value={kind} onChange={(e) => setKind(e.target.value)}>
+                <option value="">كل الأنواع</option>
+                {Object.entries(KIND_LABEL).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>التاريخ</th>
-              <th>النوع</th>
-              <th>البيان</th>
-              <th>المبلغ</th>
-              <th>الحالة</th>
-              <th>بواسطة</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.length === 0 && (
-              <tr><td colSpan={8} className="empty">لا توجد قيود</td></tr>
-            )}
-            {entries.map((entry) => (
-              <Fragment key={entry.id}>
-                <tr onClick={() => setExpanded(expanded === entry.id ? null : entry.id)} style={{ cursor: "pointer" }}>
-                  <td className="num">{entry.number}</td>
-                  <td>{formatDate(entry.date)}</td>
-                  <td>{KIND_LABEL[entry.kind] ?? entry.kind}</td>
-                  <td>{entry.memo || "—"}</td>
-                  <td className="num" style={{ fontWeight: 600 }}>{money(entry.amount, entry.currency_code)}</td>
-                  <td>
-                    <span className={`badge ${entry.status === "pending" ? "badge-warning" : entry.status === "posted" ? "" : "badge-muted"}`}>
-                      {STATUS_LABEL[entry.status] ?? entry.status}
-                    </span>
-                  </td>
-                  <td className="muted">{entry.created_by_name || "—"}</td>
-                  <td onClick={(e) => e.stopPropagation()}>
-                    {entry.status === "pending" && can("finance.approve") && (
-                      <>
-                        <button className="btn btn-sm" onClick={() => act(entry.id, "approve")}>اعتماد</button>{" "}
-                        <button className="btn btn-sm btn-ghost" onClick={() => act(entry.id, "reject")}>رفض</button>
-                      </>
-                    )}
-                    {entry.status === "posted" && can("finance.reverse") && entry.kind !== "reversal" && (
-                      <button className="btn btn-sm btn-ghost" onClick={() => act(entry.id, "reverse")}>عكس</button>
-                    )}
-                    {can("finance.delete") && (
-                      <>
-                        {" "}
-                        <button className="btn btn-sm btn-danger" onClick={() => startPurge(entry)}>
-                          حذف نهائي
-                        </button>
-                      </>
-                    )}
-                  </td>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>التاريخ</th>
+                  <th>النوع</th>
+                  <th>البيان</th>
+                  <th>المبلغ</th>
+                  <th>الحالة</th>
+                  <th>بواسطة</th>
+                  <th className="cell-actions" />
                 </tr>
-                {expanded === entry.id && (
-                  <tr>
-                    <td colSpan={8} style={{ background: "color-mix(in srgb, var(--color-primary) 3%, transparent)" }}>
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>الحساب</th>
-                            <th>مدين</th>
-                            <th>دائن</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {entry.lines.map((line) => (
-                            <tr key={line.id}>
-                              <td>{line.account_code} · {line.account_name}</td>
-                              <td className="num">{Number(line.debit) ? money(line.debit, entry.currency_code) : "—"}</td>
-                              <td className="num">{Number(line.credit) ? money(line.credit, entry.currency_code) : "—"}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </td>
-                  </tr>
-                )}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      </>
+              </thead>
+              <tbody>
+                <TableMessage
+                  colSpan={8}
+                  loading={loading}
+                  empty={entries.length === 0}
+                  emptyTitle="لا توجد قيود"
+                  emptyText="سجّل أول مصروف أو إيراد من النموذج أعلاه، ليظهر القيد المتوازن هنا."
+                />
+                {!loading &&
+                  entries.map((entry) => (
+                    <Fragment key={entry.id}>
+                      <tr
+                        className="clickable"
+                        onClick={() => setExpanded(expanded === entry.id ? null : entry.id)}
+                      >
+                        <td className="num muted">{entry.number}</td>
+                        <td className="num">{formatDate(entry.date)}</td>
+                        <td>{KIND_LABEL[entry.kind] ?? entry.kind}</td>
+                        <td className="truncate" style={{ maxWidth: 280 }}>
+                          {entry.memo || "—"}
+                        </td>
+                        <td className="num strong">{money(entry.amount, entry.currency_code)}</td>
+                        <td>
+                          <span className={`badge ${STATUS_TONE[entry.status] ?? ""}`}>
+                            {STATUS_LABEL[entry.status] ?? entry.status}
+                          </span>
+                        </td>
+                        <td className="muted">{entry.created_by_name || "—"}</td>
+                        <td className="cell-actions" onClick={(e) => e.stopPropagation()}>
+                          <span className="cell-actions-group no-print">
+                            {entry.status === "pending" && can("finance.approve") && (
+                              <>
+                                <Button size="sm" icon="check" onClick={() => act(entry.id, "approve")}>
+                                  اعتماد
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => act(entry.id, "reject")}
+                                >
+                                  رفض
+                                </Button>
+                              </>
+                            )}
+                            {entry.status === "posted" &&
+                              can("finance.reverse") &&
+                              entry.kind !== "reversal" && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  icon="refresh"
+                                  onClick={() => act(entry.id, "reverse")}
+                                >
+                                  عكس
+                                </Button>
+                              )}
+                            {can("finance.delete") && (
+                              <button
+                                className="icon-btn"
+                                title="حذف نهائي"
+                                aria-label="حذف نهائي"
+                                onClick={() => startPurge(entry)}
+                                style={{ color: "var(--color-danger)" }}
+                              >
+                                <Icon name="trash" size={16} />
+                              </button>
+                            )}
+                            <Icon
+                              name={expanded === entry.id ? "chevronUp" : "chevronDown"}
+                              size={16}
+                              className="muted"
+                            />
+                          </span>
+                        </td>
+                      </tr>
+                      {expanded === entry.id && (
+                        <tr>
+                          <td colSpan={8} className="subtable-cell">
+                            <table className="subtable">
+                              <thead>
+                                <tr>
+                                  <th>الحساب</th>
+                                  <th>مدين</th>
+                                  <th>دائن</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {entry.lines.map((line) => (
+                                  <tr key={line.id}>
+                                    <td>
+                                      <span className="muted num">{line.account_code}</span>{" "}
+                                      {line.account_name}
+                                    </td>
+                                    <td className="num">
+                                      {Number(line.debit)
+                                        ? money(line.debit, entry.currency_code)
+                                        : "—"}
+                                    </td>
+                                    <td className="num">
+                                      {Number(line.credit)
+                                        ? money(line.credit, entry.currency_code)
+                                        : "—"}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </>
   );
@@ -411,18 +497,35 @@ function ExpenseForm({
       <div className="row">
         <div className="field">
           <label>التاريخ</label>
-          <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required />
+          <input
+            type="date"
+            value={form.date}
+            onChange={(e) => setForm({ ...form, date: e.target.value })}
+            required
+          />
         </div>
         <div className="field">
           <label>المبلغ</label>
-          <input type="number" step="0.01" min="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            value={form.amount}
+            onChange={(e) => setForm({ ...form, amount: e.target.value })}
+            required
+          />
         </div>
         <div className="field">
           <label>البند</label>
-          <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+          <select
+            value={form.category}
+            onChange={(e) => setForm({ ...form, category: e.target.value })}
+          >
             <option value="">مصروفات أخرى</option>
             {categories.map((item) => (
-              <option key={item.id} value={item.id}>{item.display_name}</option>
+              <option key={item.id} value={item.id}>
+                {item.display_name}
+              </option>
             ))}
           </select>
         </div>
@@ -431,25 +534,37 @@ function ExpenseForm({
           <select value={form.branch} onChange={(e) => setForm({ ...form, branch: e.target.value })}>
             <option value="">غير محدد</option>
             {branches.map((item) => (
-              <option key={item.id} value={item.id}>{item.display_name}</option>
+              <option key={item.id} value={item.id}>
+                {item.display_name}
+              </option>
             ))}
           </select>
         </div>
         <div className="field">
           <label>من دفع؟</label>
-          <select value={form.payer} onChange={(e) => setForm({ ...form, payer: e.target.value })} required>
+          <select
+            value={form.payer}
+            onChange={(e) => setForm({ ...form, payer: e.target.value })}
+            required
+          >
             <option value="">اختر…</option>
             {payerOptions.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
             ))}
           </select>
         </div>
-        <div className="field" style={{ flex: "2 1 240px" }}>
+        <div className="field row-wide">
           <label>ملاحظة</label>
           <input value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
         </div>
       </div>
-      <button className="btn" disabled={busy}>{busy ? "جارٍ الحفظ…" : "تسجيل المصروف"}</button>
+      <div className="form-actions">
+        <Button icon="check" busy={busy}>
+          {busy ? "جارٍ الحفظ…" : "تسجيل المصروف"}
+        </Button>
+      </div>
     </form>
   );
 }
@@ -513,18 +628,35 @@ function IncomeForm({
       <div className="row">
         <div className="field">
           <label>التاريخ</label>
-          <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required />
+          <input
+            type="date"
+            value={form.date}
+            onChange={(e) => setForm({ ...form, date: e.target.value })}
+            required
+          />
         </div>
         <div className="field">
           <label>المبلغ</label>
-          <input type="number" step="0.01" min="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            value={form.amount}
+            onChange={(e) => setForm({ ...form, amount: e.target.value })}
+            required
+          />
         </div>
         <div className="field">
           <label>البند</label>
-          <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+          <select
+            value={form.category}
+            onChange={(e) => setForm({ ...form, category: e.target.value })}
+          >
             <option value="">إيرادات أخرى</option>
             {categories.map((item) => (
-              <option key={item.id} value={item.id}>{item.display_name}</option>
+              <option key={item.id} value={item.id}>
+                {item.display_name}
+              </option>
             ))}
           </select>
         </div>
@@ -533,25 +665,37 @@ function IncomeForm({
           <select value={form.branch} onChange={(e) => setForm({ ...form, branch: e.target.value })}>
             <option value="">غير محدد</option>
             {branches.map((item) => (
-              <option key={item.id} value={item.id}>{item.display_name}</option>
+              <option key={item.id} value={item.id}>
+                {item.display_name}
+              </option>
             ))}
           </select>
         </div>
         <div className="field">
           <label>إلى أين؟</label>
-          <select value={form.target} onChange={(e) => setForm({ ...form, target: e.target.value })} required>
+          <select
+            value={form.target}
+            onChange={(e) => setForm({ ...form, target: e.target.value })}
+            required
+          >
             <option value="">اختر…</option>
             {targets.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
             ))}
           </select>
         </div>
-        <div className="field" style={{ flex: "2 1 240px" }}>
+        <div className="field row-wide">
           <label>ملاحظة</label>
           <input value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
         </div>
       </div>
-      <button className="btn" disabled={busy}>{busy ? "جارٍ الحفظ…" : "تسجيل الإيراد"}</button>
+      <div className="form-actions">
+        <Button icon="check" busy={busy}>
+          {busy ? "جارٍ الحفظ…" : "تسجيل الإيراد"}
+        </Button>
+      </div>
     </form>
   );
 }
@@ -565,7 +709,13 @@ function TransferForm({
   onDone: (message: string) => void;
   onError: (message: string) => void;
 }) {
-  const [form, setForm] = useState({ date: today(), amount: "", from_account: "", to_account: "", memo: "" });
+  const [form, setForm] = useState({
+    date: today(),
+    amount: "",
+    from_account: "",
+    to_account: "",
+    memo: "",
+  });
   const [busy, setBusy] = useState(false);
 
   async function submit(event: React.FormEvent) {
@@ -587,36 +737,64 @@ function TransferForm({
       <div className="row">
         <div className="field">
           <label>التاريخ</label>
-          <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required />
+          <input
+            type="date"
+            value={form.date}
+            onChange={(e) => setForm({ ...form, date: e.target.value })}
+            required
+          />
         </div>
         <div className="field">
           <label>المبلغ</label>
-          <input type="number" step="0.01" min="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            value={form.amount}
+            onChange={(e) => setForm({ ...form, amount: e.target.value })}
+            required
+          />
         </div>
         <div className="field">
           <label>من حساب</label>
-          <select value={form.from_account} onChange={(e) => setForm({ ...form, from_account: e.target.value })} required>
+          <select
+            value={form.from_account}
+            onChange={(e) => setForm({ ...form, from_account: e.target.value })}
+            required
+          >
             <option value="">اختر…</option>
             {accounts.map((a) => (
-              <option key={a.id} value={a.id}>{a.display_name}</option>
+              <option key={a.id} value={a.id}>
+                {a.display_name}
+              </option>
             ))}
           </select>
         </div>
         <div className="field">
           <label>إلى حساب</label>
-          <select value={form.to_account} onChange={(e) => setForm({ ...form, to_account: e.target.value })} required>
+          <select
+            value={form.to_account}
+            onChange={(e) => setForm({ ...form, to_account: e.target.value })}
+            required
+          >
             <option value="">اختر…</option>
             {accounts.map((a) => (
-              <option key={a.id} value={a.id}>{a.display_name}</option>
+              <option key={a.id} value={a.id}>
+                {a.display_name}
+              </option>
             ))}
           </select>
         </div>
-        <div className="field" style={{ flex: "2 1 240px" }}>
+        <div className="field row-wide">
           <label>ملاحظة</label>
           <input value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
         </div>
       </div>
-      <button className="btn" disabled={busy}>{busy ? "جارٍ التنفيذ…" : "تنفيذ التحويل"}</button>
+      <div className="form-actions">
+        <Button icon="swap" busy={busy}>
+          {busy ? "جارٍ التنفيذ…" : "تنفيذ التحويل"}
+        </Button>
+      </div>
     </form>
   );
 }

@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Icon from "@/components/Icon";
 
 type Props = {
   title: string;
-  /** What is about to happen, in one plain sentence. */
+  /** ما الذي سيحدث، بجملة واحدة واضحة. */
   message: string;
-  /** Everything else that goes with it. Shown before the button, never after. */
+  /** كل ما يذهب معه. يُعرض قبل الزر لا بعده. */
   consequences?: string[];
-  /** Sensitive actions ask for the password again; ordinary ones do not. */
+  /** العمليات الحساسة تسأل كلمة المرور من جديد؛ العادية لا. */
   requirePassword?: boolean;
   confirmLabel?: string;
   busy?: boolean;
@@ -18,11 +19,10 @@ type Props = {
 };
 
 /**
- * The last thing between a click and something irreversible.
+ * آخر ما يفصل بين الضغطة وشيء لا يُسترجع.
  *
- * It states what will be lost before it offers the button, and for anything
- * sensitive it asks for the password again — a browser left open on a desk is
- * not proof of who is standing in front of it.
+ * يذكر ما سيُفقد قبل أن يعرض الزر، وفي كل ما هو حساس يطلب كلمة المرور من
+ * جديد — فمتصفّح تُرك مفتوحًا على مكتب ليس دليلًا على من يقف أمامه.
  */
 export default function ConfirmDialog({
   title,
@@ -56,17 +56,29 @@ export default function ConfirmDialog({
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
       <form className="modal" onSubmit={submit} role="dialog" aria-modal="true" aria-label={title}>
-        <div className="modal-title">{title}</div>
-        <p className="modal-message">{message}</p>
+        <div className="inline" style={{ alignItems: "flex-start", gap: "var(--s3)" }}>
+          <div className="stat-icon tone-danger" style={{ width: 34, height: 34 }}>
+            <Icon name="warning" size={18} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="modal-title">{title}</div>
+            <p className="modal-message">{message}</p>
+          </div>
+        </div>
 
         {consequences.length > 0 && (
-          <div className="alert alert-error" style={{ marginBottom: 14 }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>سيُحذف معه أيضًا:</div>
-            <ul style={{ margin: 0, paddingInlineStart: 18 }}>
-              {consequences.map((line, index) => (
-                <li key={index}>{line}</li>
-              ))}
-            </ul>
+          <div className="alert alert-error">
+            <Icon name="trash" />
+            <span>
+              <div className="strong" style={{ marginBottom: 4 }}>
+                سيُحذف معه أيضًا:
+              </div>
+              <ul style={{ margin: 0, paddingInlineStart: 18 }}>
+                {consequences.map((line, index) => (
+                  <li key={index}>{line}</li>
+                ))}
+              </ul>
+            </span>
           </div>
         )}
 
@@ -84,7 +96,12 @@ export default function ConfirmDialog({
           </div>
         )}
 
-        {error && <div className="alert alert-error">{error}</div>}
+        {error && (
+          <div className="alert alert-error">
+            <Icon name="warning" />
+            <span>{error}</span>
+          </div>
+        )}
 
         <div className="modal-actions">
           <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={busy}>
@@ -96,6 +113,7 @@ export default function ConfirmDialog({
             className="btn btn-danger"
             disabled={busy || (requirePassword && !password)}
           >
+            {busy ? <span className="spinner" /> : <Icon name="trash" />}
             {busy ? "جارٍ التنفيذ…" : confirmLabel}
           </button>
         </div>

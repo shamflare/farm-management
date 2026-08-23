@@ -3,6 +3,15 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
+import Icon from "@/components/Icon";
+import {
+  Button,
+  ErrorNote,
+  PageHeader,
+  SuccessNote,
+  TableMessage,
+  Tabs,
+} from "@/components/ui";
 
 type Field = {
   id: string;
@@ -45,7 +54,7 @@ const FIELD_TYPES: Record<string, string> = {
 };
 
 export default function FieldsPage() {
-  const { can } = useApp();
+  const { can, me } = useApp();
   const [entity, setEntity] = useState("animal");
   const [fields, setFields] = useState<Field[]>([]);
   const [error, setError] = useState("");
@@ -100,28 +109,19 @@ export default function FieldsPage() {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">بناء النماذج</h1>
-          <p className="page-sub">
-            أظهر أو أخفِ أو أعد تسمية أي حقل، وأضف حقولًا جديدة — بدون مبرمج
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="بناء النماذج"
+        subtitle="أظهر أو أخفِ أو أعد تسمية أي حقل، وأضف حقولًا جديدة — بدون مبرمج"
+        farm={me?.farm?.name}
+      />
 
-      {error && <div className="alert alert-error">{error}</div>}
-      {notice && <div className="alert alert-ok">{notice}</div>}
+      <ErrorNote message={error} />
+      <SuccessNote message={notice} />
 
-      <div className="tabs">
-        {ENTITIES.map((item) => (
-          <button key={item.key} className={`tab ${entity === item.key ? "active" : ""}`} onClick={() => setEntity(item.key)}>
-            {item.label}
-          </button>
-        ))}
-      </div>
+      <Tabs value={entity} onChange={setEntity} options={ENTITIES} />
 
       {!readOnly && (
-        <form className="card" style={{ marginBottom: 16 }} onSubmit={addField}>
+        <form className="card mb-4" onSubmit={addField}>
           <div className="row">
             <div className="field">
               <label>حقل جديد</label>
@@ -140,9 +140,8 @@ export default function FieldsPage() {
                 ))}
               </select>
             </div>
-            <div className="field" style={{ flex: "0 0 auto" }}>
-              <label>&nbsp;</label>
-              <button className="btn">إضافة الحقل</button>
+            <div style={{ flex: "0 0 auto" }}>
+              <Button icon="plus">إضافة الحقل</Button>
             </div>
           </div>
         </form>
@@ -163,20 +162,44 @@ export default function FieldsPage() {
             </tr>
           </thead>
           <tbody>
+            <TableMessage
+              colSpan={8}
+              empty={fields.length === 0}
+              emptyTitle="لا توجد حقول"
+              emptyText="أضف حقلًا من النموذج أعلاه ليظهر في شاشة الإدخال مباشرة بلا تعديل كود."
+            />
             {fields.map((field, index) => (
               <tr key={field.id}>
-                <td style={{ whiteSpace: "nowrap" }}>
-                  <button className="btn btn-sm btn-ghost" disabled={readOnly || index === 0} onClick={() => move(index, -1)}>↑</button>{" "}
-                  <button className="btn btn-sm btn-ghost" disabled={readOnly || index === fields.length - 1} onClick={() => move(index, 1)}>↓</button>
+                <td className="nowrap">
+                  <span className="cell-actions-group">
+                    <button
+                      className="icon-btn bordered"
+                      title="أعلى"
+                      aria-label="نقل لأعلى"
+                      disabled={readOnly || index === 0}
+                      onClick={() => move(index, -1)}
+                    >
+                      <Icon name="chevronUp" size={15} />
+                    </button>
+                    <button
+                      className="icon-btn bordered"
+                      title="أسفل"
+                      aria-label="نقل لأسفل"
+                      disabled={readOnly || index === fields.length - 1}
+                      onClick={() => move(index, 1)}
+                    >
+                      <Icon name="chevronDown" size={15} />
+                    </button>
+                  </span>
                 </td>
-                <td>
+                <td style={{ minWidth: 220 }}>
                   <input
+                    className="input"
                     defaultValue={field.display_label}
                     disabled={readOnly}
                     onBlur={(e) => {
                       if (e.target.value !== field.display_label) patch(field, { label_ar: e.target.value });
                     }}
-                    style={{ border: "1px solid var(--color-border)", borderRadius: 8, padding: "6px 10px", width: "100%" }}
                   />
                 </td>
                 <td className="muted num">{field.key}</td>
@@ -191,21 +214,23 @@ export default function FieldsPage() {
                   <input type="checkbox" checked={field.show_in_list} disabled={readOnly} onChange={() => patch(field, { show_in_list: !field.show_in_list })} />
                 </td>
                 <td>
-                  <span className={`badge ${field.is_builtin ? "badge-muted" : ""}`}>
+                  <span className={`badge ${field.is_builtin ? "badge-muted" : "badge-info"}`}>
                     {field.is_builtin ? "حقل أساسي" : "حقل مخصص"}
                   </span>
                 </td>
               </tr>
             ))}
-            {fields.length === 0 && <tr><td colSpan={8} className="empty">لا توجد حقول</td></tr>}
           </tbody>
         </table>
       </div>
 
-      <p className="page-sub" style={{ marginTop: 12 }}>
-        الحقول الأساسية مرتبطة بأعمدة حقيقية في قاعدة البيانات، لذلك يمكن إخفاؤها لا حذفها — حتى لا تنكسر
-        التقارير والمحاسبة.
-      </p>
+      <div className="alert alert-info mt-4 no-print">
+        <Icon name="info" />
+        <span>
+          الحقول الأساسية مرتبطة بأعمدة حقيقية في قاعدة البيانات، لذلك يمكن إخفاؤها لا حذفها — حتى
+          لا تنكسر التقارير والمحاسبة.
+        </span>
+      </div>
     </>
   );
 }

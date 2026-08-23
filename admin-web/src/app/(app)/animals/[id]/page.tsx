@@ -6,6 +6,19 @@ import Link from "next/link";
 import { api, formatDate, formatNumber, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 import Attachments from "@/components/Attachments";
+import Icon, { IconName } from "@/components/Icon";
+import {
+  Button,
+  EmptyState,
+  ErrorNote,
+  Loading,
+  PageHeader,
+  Stat,
+  SuccessNote,
+  TableCard,
+  TableMessage,
+  Tabs,
+} from "@/components/ui";
 
 type Animal = {
   id: string;
@@ -85,19 +98,30 @@ const HEALTH_LABEL: Record<string, string> = {
   diagnosis: "تشخيص",
   checkup: "فحص",
 };
-const EVENT_ICON: Record<string, string> = {
-  created: "📝",
-  purchased: "🛒",
-  birth: "🐣",
-  born: "🐣",
-  weight: "⚖️",
-  health: "💊",
-  vaccine: "💉",
-  status: "🔄",
-  branch: "🔀",
-  sold: "💵",
-  died: "⚰️",
-  moved: "📍",
+const EVENT_ICON: Record<string, IconName> = {
+  created: "file",
+  purchased: "cart",
+  birth: "heart",
+  born: "heart",
+  weight: "scale",
+  health: "pulse",
+  vaccine: "pulse",
+  status: "refresh",
+  branch: "swap",
+  sold: "banknote",
+  died: "warning",
+  moved: "tag",
+};
+
+/** لون دائرة الحدث يقول نوعه قبل قراءة عنوانه. */
+const EVENT_TONE: Record<string, string> = {
+  purchased: "tone-info",
+  birth: "tone-accent",
+  born: "tone-accent",
+  health: "tone-info",
+  vaccine: "tone-info",
+  sold: "tone-success",
+  died: "tone-danger",
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -105,7 +129,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 export default function AnimalDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const { can, currency } = useApp();
+  const { can, currency, me } = useApp();
   const [animal, setAnimal] = useState<Animal | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
   const [cost, setCost] = useState<Cost | null>(null);
@@ -171,37 +195,87 @@ export default function AnimalDetailPage() {
     load().catch((err) => setError(err.message));
   }
 
-  if (error) return <div className="alert alert-error">{error}</div>;
-  if (!animal) return <div className="empty">جارٍ التحميل…</div>;
+  if (error) return <ErrorNote message={error} />;
+  if (!animal) return <Loading />;
 
-  const actions = [
-    { key: "edit", label: "تعديل البيانات", permission: "animals.edit", when: true },
-    { key: "health", label: "لقاح أو علاج", permission: "health.create", when: animal.is_on_farm },
-    { key: "weight", label: "تسجيل وزن", permission: "animals.edit", when: animal.is_on_farm },
+  const allActions: {
+    key: string;
+    label: string;
+    icon: IconName;
+    permission: string;
+    when: boolean;
+  }[] = [
+    { key: "edit", label: "تعديل البيانات", icon: "edit", permission: "animals.edit", when: true },
+    {
+      key: "health",
+      label: "لقاح أو علاج",
+      icon: "pulse",
+      permission: "health.create",
+      when: animal.is_on_farm,
+    },
+    {
+      key: "weight",
+      label: "تسجيل وزن",
+      icon: "scale",
+      permission: "animals.edit",
+      when: animal.is_on_farm,
+    },
     {
       key: "birth",
       label: "تسجيل ولادة",
+      icon: "heart",
       permission: "births.create",
       when: animal.sex === "female" && animal.is_on_farm,
     },
-    { key: "branch", label: "نقل بين الفروع", permission: "animals.edit", when: animal.is_on_farm },
-    { key: "death", label: "تسجيل نفوق", permission: "finance.create", when: animal.is_alive },
-  ].filter((action) => action.when && can(action.permission));
+    {
+      key: "branch",
+      label: "نقل بين الفروع",
+      icon: "swap",
+      permission: "animals.edit",
+      when: animal.is_on_farm,
+    },
+    {
+      key: "death",
+      label: "تسجيل نفوق",
+      icon: "warning",
+      permission: "finance.create",
+      when: animal.is_alive,
+    },
+  ];
+
+  const actions = allActions.filter((action) => action.when && can(action.permission));
 
   return (
     <>
+      <Link href="/animals" className="btn btn-ghost btn-sm mb-4 no-print">
+        <Icon name="chevronEnd" size={15} />
+        عودة لقائمة الحيوانات
+      </Link>
+
       <div className="page-head">
-        <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-          {animal.photo_url && (
+        <div className="inline" style={{ alignItems: "flex-start", gap: "var(--s4)" }}>
+          {animal.photo_url ? (
             <img
               src={animal.photo_url}
               alt={animal.tag}
-              style={{ width: 84, height: 84, objectFit: "cover", borderRadius: 12 }}
+              style={{
+                width: 78,
+                height: 78,
+                objectFit: "cover",
+                borderRadius: "var(--radius)",
+                border: "1px solid var(--color-border)",
+              }}
             />
+          ) : (
+            <div
+              className="stat-icon"
+              style={{ width: 78, height: 78, borderRadius: "var(--radius)" }}
+            >
+              <Icon name="sheep" size={34} />
+            </div>
           )}
           <div>
-            <Link href="/animals" className="page-sub">← عودة للقائمة</Link>
-            <h1 className="page-title" style={{ marginTop: 6 }}>
+            <h1 className="page-title num" data-farm={me?.farm?.name}>
               {animal.tag} {animal.name && `· ${animal.name}`}
             </h1>
             <p className="page-sub">
@@ -210,23 +284,19 @@ export default function AnimalDetailPage() {
             </p>
           </div>
         </div>
-        <span className={`badge ${animal.is_on_farm ? "" : "badge-muted"}`}>{animal.status_name}</span>
+        <span className={`badge ${animal.is_on_farm ? "badge-success" : "badge-muted"}`}>
+          {animal.status_name}
+        </span>
       </div>
 
-      {notice && <div className="alert alert-ok">{notice}</div>}
+      <SuccessNote message={notice} />
 
       {actions.length > 0 && (
-        <div className="tabs">
-          {actions.map((action) => (
-            <button
-              key={action.key}
-              className={`tab ${openForm === action.key ? "active" : ""}`}
-              onClick={() => setOpenForm(openForm === action.key ? "" : action.key)}
-            >
-              {action.label}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          value={openForm}
+          onChange={(key) => setOpenForm(openForm === key ? "" : key)}
+          options={actions}
+        />
       )}
 
       {openForm === "edit" && (
@@ -258,149 +328,201 @@ export default function AnimalDetailPage() {
         />
       )}
 
-      <div className="grid grid-4" style={{ marginBottom: 20 }}>
-        <div className="card">
-          <div className="stat-label">تاريخ الميلاد</div>
-          <div className="stat-value" style={{ fontSize: "1.1rem" }}>{formatDate(animal.birth_date)}</div>
-          {animal.current_weight && (
-            <div className="stat-hint">آخر وزن {formatNumber(animal.current_weight, 1)} كغ</div>
-          )}
-        </div>
-        <div className="card">
-          <div className="stat-label">إجمالي التكلفة</div>
-          <div className="stat-value num" style={{ fontSize: "1.2rem" }}>{money(cost?.total_cost, currency)}</div>
-          <div className="stat-hint">سعر الشراء + كل مصروف مرتبط به</div>
-        </div>
-        <div className="card">
-          <div className="stat-label">الإيراد المتحقق</div>
-          <div className="stat-value num" style={{ fontSize: "1.2rem" }}>{money(cost?.total_revenue, currency)}</div>
-        </div>
-        <div className="card">
-          <div className="stat-label">الصافي</div>
-          <div
-            className={`stat-value num ${Number(cost?.net ?? 0) >= 0 ? "positive" : "negative"}`}
-            style={{ fontSize: "1.2rem" }}
-          >
-            {money(cost?.net, currency)}
-          </div>
-        </div>
+      <div className="grid grid-4 mb-5">
+        <Stat
+          label="تاريخ الميلاد"
+          value={formatDate(animal.birth_date)}
+          hint={
+            animal.current_weight
+              ? `آخر وزن ${formatNumber(animal.current_weight, 1)} كغ`
+              : "لم يُسجَّل وزن بعد"
+          }
+          icon="calendar"
+        />
+        <Stat
+          label="إجمالي التكلفة"
+          value={money(cost?.total_cost, currency)}
+          hint="سعر الشراء + كل مصروف مرتبط به"
+          icon="coins"
+          tone="warning"
+        />
+        <Stat
+          label="الإيراد المتحقق"
+          value={money(cost?.total_revenue, currency)}
+          hint="ما دخل المزرعة من هذا الحيوان"
+          icon="banknote"
+          tone="success"
+        />
+        <Stat
+          label="الصافي"
+          value={money(cost?.net, currency)}
+          valueTone={Number(cost?.net ?? 0) >= 0 ? "positive" : "negative"}
+          icon={Number(cost?.net ?? 0) >= 0 ? "trendUp" : "trendDown"}
+          tone={Number(cost?.net ?? 0) >= 0 ? "success" : "danger"}
+        />
       </div>
 
       <div className="grid grid-2">
         <div className="card">
-          <div className="card-title">السجل الزمني</div>
-          {events.length === 0 && <div className="empty">لا توجد أحداث</div>}
-          <div style={{ display: "grid", gap: 2 }}>
-            {events.map((event) => (
-              <div
-                key={event.id}
-                style={{
-                  display: "flex",
-                  gap: 12,
-                  padding: "10px 0",
-                  borderBottom: "1px solid var(--color-border)",
-                }}
-              >
-                <span style={{ fontSize: "1.1rem" }}>{EVENT_ICON[event.event_type] ?? "•"}</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600 }}>{event.title}</div>
-                  {event.detail && <div className="stat-hint">{event.detail}</div>}
-                </div>
-                <div className="stat-hint" style={{ whiteSpace: "nowrap" }}>
-                  {formatDate(event.happened_on)}
-                  {event.amount && (
-                    <div className="num" style={{ fontWeight: 600, color: "var(--color-text)" }}>
-                      {money(event.amount, currency)}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
+          <div className="card-title">
+            <span className="inline">
+              <Icon name="history" size={17} className="muted" />
+              السجل الزمني
+            </span>
+            <span className="badge badge-muted">{events.length}</span>
           </div>
+
+          {events.length === 0 ? (
+            <EmptyState
+              icon="history"
+              title="لا توجد أحداث بعد"
+              text="كل ما يجري على هذا الحيوان — شراء، لقاح، وزن، ولادة، نقل، بيع — يُضاف هنا بترتيبه الزمني."
+            />
+          ) : (
+            <div className="stack-sm">
+              {events.map((event) => (
+                <div
+                  key={event.id}
+                  className="inline"
+                  style={{
+                    alignItems: "flex-start",
+                    gap: "var(--s3)",
+                    padding: "var(--s3) 0",
+                    borderBottom: "1px solid var(--border-subtle)",
+                    flexWrap: "nowrap",
+                  }}
+                >
+                  <div
+                    className={`stat-icon ${EVENT_TONE[event.event_type] ?? ""}`}
+                    style={{ width: 30, height: 30 }}
+                  >
+                    <Icon name={EVENT_ICON[event.event_type] ?? "tag"} size={15} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="strong">{event.title}</div>
+                    {event.detail && <div className="stat-hint">{event.detail}</div>}
+                  </div>
+                  <div className="stat-hint nowrap text-end">
+                    <div className="num">{formatDate(event.happened_on)}</div>
+                    {event.amount && (
+                      <div className="num strong" style={{ color: "var(--color-text)" }}>
+                        {money(event.amount, currency)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        <div style={{ display: "grid", gap: 16, alignContent: "start" }}>
-          <div className="card">
-            <div className="card-title">
-              <span>اللقاحات والعلاجات</span>
-              <span className="badge badge-muted">{health.length}</span>
-            </div>
+        <div className="stack-lg" style={{ alignContent: "start" }}>
+          <TableCard
+            title={
+              <span className="inline">
+                <Icon name="pulse" size={17} className="muted" />
+                اللقاحات والعلاجات
+              </span>
+            }
+            action={<span className="badge badge-muted">{health.length}</span>}
+          >
             <table>
               <thead>
                 <tr><th>النوع</th><th>البند</th><th>التاريخ</th><th>الجرعة القادمة</th></tr>
               </thead>
               <tbody>
+                <TableMessage
+                  colSpan={4}
+                  empty={health.length === 0}
+                  emptyTitle="لا توجد سجلات صحية"
+                  emptyText="سجّل لقاحًا أو علاجًا من الأزرار أعلاه؛ الجرعة القادمة تصير تنبيهًا في وقتها."
+                />
                 {health.map((row) => {
                   const overdue = row.next_due_on && row.next_due_on < today();
                   return (
                     <tr key={row.id}>
                       <td>{HEALTH_LABEL[row.kind] ?? row.kind}</td>
                       <td>{row.item_name || row.notes || "—"}</td>
-                      <td className="muted">{formatDate(row.happened_on)}</td>
+                      <td className="muted num">{formatDate(row.happened_on)}</td>
                       <td>
                         {row.next_due_on ? (
                           <span className={`badge ${overdue ? "badge-danger" : "badge-warning"}`}>
                             {formatDate(row.next_due_on)}
                           </span>
-                        ) : "—"}
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
                       </td>
                     </tr>
                   );
                 })}
-                {health.length === 0 && (
-                  <tr><td colSpan={4} className="empty">لا توجد سجلات صحية</td></tr>
-                )}
               </tbody>
             </table>
-          </div>
+          </TableCard>
 
-          <div className="card">
-            <div className="card-title">
-              <span>الأوزان</span>
-              <span className="badge badge-muted">{weights.length}</span>
-            </div>
+          <TableCard
+            title={
+              <span className="inline">
+                <Icon name="scale" size={17} className="muted" />
+                الأوزان
+              </span>
+            }
+            action={<span className="badge badge-muted">{weights.length}</span>}
+          >
             <table>
               <tbody>
+                <TableMessage
+                  colSpan={3}
+                  empty={weights.length === 0}
+                  emptyTitle="لا توجد أوزان مسجلة"
+                  emptyText="الوزن الأخير يظهر في بطاقة الحيوان وفي جدول القطيع."
+                />
                 {weights.map((row) => (
                   <tr key={row.id}>
-                    <td className="muted">{formatDate(row.measured_on)}</td>
-                    <td className="num" style={{ fontWeight: 600 }}>{formatNumber(row.weight_kg, 1)} كغ</td>
+                    <td className="muted num">{formatDate(row.measured_on)}</td>
+                    <td className="num strong">{formatNumber(row.weight_kg, 1)} كغ</td>
                     <td className="muted">{row.note}</td>
                   </tr>
                 ))}
-                {weights.length === 0 && (
-                  <tr><td colSpan={3} className="empty">لا توجد أوزان مسجلة</td></tr>
-                )}
               </tbody>
             </table>
-          </div>
+          </TableCard>
 
           <div className="card">
-            <div className="card-title">النسب</div>
-            <div className="row" style={{ marginBottom: 12 }}>
+            <div className="card-title">
+              <span className="inline">
+                <Icon name="users" size={17} className="muted" />
+                النسب
+              </span>
+            </div>
+            <div className="row mb-5">
               <div>
                 <div className="stat-label">الأم</div>
-                <div style={{ fontWeight: 600 }}>
+                <div className="strong">
                   {animal.mother ? (
-                    <Link href={`/animals/${animal.mother}`} style={{ color: "var(--color-primary)" }}>
+                    <Link href={`/animals/${animal.mother}`} className="link num">
                       {animal.mother_tag}
                     </Link>
-                  ) : "—"}
+                  ) : (
+                    <span className="muted">—</span>
+                  )}
                 </div>
               </div>
               <div>
                 <div className="stat-label">الأب</div>
-                <div style={{ fontWeight: 600 }}>
+                <div className="strong">
                   {animal.father ? (
-                    <Link href={`/animals/${animal.father}`} style={{ color: "var(--color-primary)" }}>
+                    <Link href={`/animals/${animal.father}`} className="link num">
                       {animal.father_tag}
                     </Link>
-                  ) : "—"}
+                  ) : (
+                    <span className="muted">—</span>
+                  )}
                 </div>
               </div>
             </div>
             <div className="stat-label">الأبناء ({tree?.children.length ?? 0})</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+            <div className="inline mt-4">
               {(tree?.children ?? []).map((child) => (
                 <Link key={child.id} href={`/animals/${child.id}`} className="badge">
                   {child.tag} · {child.status}
@@ -412,42 +534,50 @@ export default function AnimalDetailPage() {
 
           {animal.sex === "female" && productivity && (
             <div className="card">
-              <div className="card-title">الإنتاجية</div>
-              <div className="grid grid-4" style={{ gap: 12 }}>
-                <div>
-                  <div className="stat-label">الولادات</div>
-                  <div className="stat-value num" style={{ fontSize: "1.2rem" }}>{productivity.births}</div>
-                </div>
-                <div>
-                  <div className="stat-label">المواليد</div>
-                  <div className="stat-value num" style={{ fontSize: "1.2rem" }}>{productivity.total_offspring}</div>
-                </div>
-                <div>
-                  <div className="stat-label">أحياء</div>
-                  <div className="stat-value num" style={{ fontSize: "1.2rem" }}>{productivity.alive}</div>
-                </div>
-                <div>
-                  <div className="stat-label">أموات عند الولادة</div>
-                  <div className="stat-value num" style={{ fontSize: "1.2rem" }}>{productivity.stillborn}</div>
-                </div>
+              <div className="card-title">
+                <span className="inline">
+                  <Icon name="heart" size={17} className="muted" />
+                  الإنتاجية
+                </span>
+              </div>
+              <div className="grid grid-4" style={{ gap: "var(--s3)" }}>
+                {[
+                  { label: "الولادات", value: productivity.births },
+                  { label: "المواليد", value: productivity.total_offspring },
+                  { label: "أحياء", value: productivity.alive },
+                  { label: "أموات عند الولادة", value: productivity.stillborn },
+                ].map((cell) => (
+                  <div key={cell.label}>
+                    <div className="stat-label">{cell.label}</div>
+                    <div className="stat-value num" style={{ fontSize: "1.2rem" }}>
+                      {formatNumber(cell.value)}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
           {Object.keys(animal.custom_fields ?? {}).length > 0 && (
-            <div className="card">
-              <div className="card-title">حقول مخصصة</div>
+            <TableCard
+              title={
+                <span className="inline">
+                  <Icon name="blocks" size={17} className="muted" />
+                  حقول مخصصة
+                </span>
+              }
+            >
               <table>
                 <tbody>
                   {Object.entries(animal.custom_fields).map(([key, value]) => (
                     <tr key={key}>
                       <td className="muted">{key}</td>
-                      <td>{String(value)}</td>
+                      <td className="strong">{String(value)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
+            </TableCard>
           )}
 
           {can("attachments.view") && (
@@ -500,12 +630,16 @@ function FormCard({
   children: React.ReactNode;
 }) {
   return (
-    <form className="card" style={{ marginBottom: 16 }} onSubmit={onSubmit}>
+    <form className="card mb-4" onSubmit={onSubmit}>
       <div className="card-title">{title}</div>
-      {hint && <p className="page-sub" style={{ marginBottom: 12 }}>{hint}</p>}
-      {error && <div className="alert alert-error">{error}</div>}
+      {hint && <p className="page-sub mb-4">{hint}</p>}
+      <ErrorNote message={error} />
       <div className="row">{children}</div>
-      <button className="btn" disabled={busy}>{busy ? "جارٍ الحفظ…" : label}</button>
+      <div className="form-actions">
+        <Button icon="check" busy={busy}>
+          {busy ? "جارٍ الحفظ…" : label}
+        </Button>
+      </div>
     </form>
   );
 }
@@ -737,7 +871,7 @@ function HealthForm({
             ))}
         </select>
       </div>
-      <div className="field" style={{ flex: "2 1 240px" }}>
+      <div className="field row-wide">
         <label>ملاحظات</label>
         <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
       </div>
@@ -781,7 +915,7 @@ function WeightForm({ animal, onDone }: { animal: Animal; onDone: () => void }) 
           required
         />
       </div>
-      <div className="field" style={{ flex: "2 1 240px" }}>
+      <div className="field row-wide">
         <label>ملاحظة</label>
         <input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
       </div>
@@ -862,7 +996,7 @@ function BirthForm({
           onChange={(e) => setForm({ ...form, stillborn: e.target.value })}
         />
       </div>
-      <div className="field" style={{ flex: "2 1 240px" }}>
+      <div className="field row-wide">
         <label>ملاحظات</label>
         <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
       </div>
@@ -873,7 +1007,7 @@ function BirthForm({
         </div>
         {offspring.map((row, index) => (
           <div className="row" key={index} style={{ marginBottom: 8 }}>
-            <div className="field" style={{ margin: 0 }}>
+            <div className="field">
               <label>الجنس</label>
               <select
                 value={row.sex}
@@ -887,7 +1021,7 @@ function BirthForm({
                 <option value="male">ذكر</option>
               </select>
             </div>
-            <div className="field" style={{ margin: 0 }}>
+            <div className="field">
               <label>الرقم (اتركه فارغًا ليُرقَّم تلقائيًا)</label>
               <input
                 value={row.tag}
@@ -898,7 +1032,7 @@ function BirthForm({
                 }}
               />
             </div>
-            <div className="field" style={{ margin: 0 }}>
+            <div className="field">
               <label>الاسم</label>
               <input
                 value={row.name}
@@ -990,7 +1124,7 @@ function BranchForm({
           onChange={(e) => setForm({ ...form, date: e.target.value })}
         />
       </div>
-      <div className="field" style={{ flex: "2 1 240px" }}>
+      <div className="field row-wide">
         <label>السبب</label>
         <input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
       </div>
@@ -1047,7 +1181,7 @@ function DeathForm({
           ))}
         </select>
       </div>
-      <div className="field" style={{ flex: "2 1 240px" }}>
+      <div className="field row-wide">
         <label>ملاحظات</label>
         <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
       </div>

@@ -1,6 +1,24 @@
-/* Every colour, radius and spacing value below comes from the farm's theme,
-   served by the API. Changing the look never requires a rebuild. */
+/* ==========================================================================
+   نظام التصميم — Farm Design System
+   ==========================================================================
+   قاعدة واحدة تحكم كل شاشة: الألوان والمسافات والزوايا والظلال كلها رموز
+   (tokens). الخادم يرسل ألوان المزرعة وخطها وكثافتها، وكل ما دونها مشتق منها
+   بـ color-mix — فتغيير اللون الأساسي وحده يعيد ضبط الواجهة كلها بلا إعادة بناء.
+
+   الترتيب:
+     1. الرموز           2. الأساس            3. الهيكل
+     4. الشريط الجانبي   5. الشريط العلوي     6. ترويسة الصفحة
+     7. البطاقات         8. الإحصاءات         9. الجداول
+    10. الأزرار         11. الحقول           12. شريط الأدوات
+    13. الشارات         14. التنبيهات        15. الفراغ والتحميل
+    16. التبويبات       17. النوافذ          18. الدخول
+    19. أدوات مساعدة    20. الاستجابة        21. الطباعة
+   ========================================================================== */
+
+/* --- 1. الرموز ------------------------------------------------------- */
+
 :root {
+  /* يرسلها الخادم من Theme Builder */
   --color-primary: #166534;
   --color-primary-contrast: #ffffff;
   --color-accent: #ca8a04;
@@ -8,32 +26,88 @@
   --color-warning: #b45309;
   --color-danger: #b91c1c;
   --color-info: #1d4ed8;
-  --color-background: #f8fafc;
+  --color-background: #f6f7f9;
   --color-surface: #ffffff;
   --color-text: #0f172a;
-  --color-text-muted: #475569;
-  --color-border: #e2e8f0;
+  --color-text-muted: #64748b;
+  --color-border: #e5e8ec;
   --radius: 12px;
   --font-scale: 1;
   --space-unit: 1;
   --font-family: "Cairo", "Segoe UI", system-ui, sans-serif;
-  --pad: calc(16px * var(--space-unit));
-  --shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.06);
+
+  /* مشتقة — لا يرسلها الخادم ولا تُكتب بخط اليد في أي صفحة */
+  --surface-sunken: color-mix(in srgb, var(--color-text) 3%, var(--color-surface));
+  --surface-hover: color-mix(in srgb, var(--color-primary) 5%, transparent);
+  --surface-tint: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
+  --border-strong: color-mix(in srgb, var(--color-text) 14%, var(--color-border));
+  --border-subtle: color-mix(in srgb, var(--color-border) 60%, transparent);
+  --ring: 0 0 0 3px color-mix(in srgb, var(--color-primary) 22%, transparent);
+  --ring-danger: 0 0 0 3px color-mix(in srgb, var(--color-danger) 22%, transparent);
+
+  /* المسافات — كلها تتبع كثافة الواجهة التي تختارها المزرعة */
+  --s1: calc(4px * var(--space-unit));
+  --s2: calc(8px * var(--space-unit));
+  --s3: calc(12px * var(--space-unit));
+  --s4: calc(16px * var(--space-unit));
+  --s5: calc(20px * var(--space-unit));
+  --s6: calc(24px * var(--space-unit));
+  --s8: calc(32px * var(--space-unit));
+  --s10: calc(40px * var(--space-unit));
+  --pad: var(--s4);
+
+  /* الزوايا — مشتقة من زاوية واحدة يختارها المالك */
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-lg: calc(var(--radius) * 1.35);
+  --radius-pill: 999px;
+
+  /* الظلال — ثلاث درجات، لا أكثر */
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 2px 8px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 2px 4px rgba(15, 23, 42, 0.05), 0 12px 28px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 24px 60px rgba(15, 23, 42, 0.22);
+
+  /* المقاسات الثابتة للهيكل */
+  --sidebar-w: 266px;
+  --topbar-h: 62px;
+  --control-h: calc(42px * var(--space-unit));
+  --control-h-sm: calc(34px * var(--space-unit));
+
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-* {
+/* --- 2. الأساس -------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-html,
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   font-family: var(--font-family);
-  font-size: calc(16px * var(--font-scale));
+  font-size: calc(15.5px * var(--font-scale));
+  line-height: 1.65;
   background: var(--color-background);
   color: var(--color-text);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  line-height: 1.35;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 a {
@@ -47,48 +121,124 @@ select,
 textarea {
   font-family: inherit;
   font-size: 1rem;
+  color: inherit;
 }
 
-/* --- layout --------------------------------------------------------- */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--radius-sm);
+}
 
-.shell {
+svg {
+  flex-shrink: 0;
+}
+
+/* شريط تمرير هادئ بدل شريط النظام العريض */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-text) 18%, transparent) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-text) 16%, transparent);
+  border-radius: var(--radius-pill);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--color-text) 28%, transparent);
+  background-clip: content-box;
+}
+
+/* --- 3. الهيكل -------------------------------------------------------- */
+
+.app {
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
   min-height: 100vh;
 }
+
+.app-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.main {
+  padding: var(--s6) var(--s8) var(--s10);
+  width: 100%;
+  max-width: 1440px;
+  margin-inline: auto;
+  min-width: 0;
+  animation: page-in 0.24s var(--ease);
+}
+
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* --- 4. الشريط الجانبي ------------------------------------------------- */
 
 .sidebar {
   background: var(--color-surface);
   border-inline-start: 1px solid var(--color-border);
-  padding: var(--pad);
   display: flex;
   flex-direction: column;
-  gap: 4px;
   position: sticky;
   top: 0;
   height: 100vh;
-  overflow-y: auto;
+  z-index: 40;
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 4px 20px;
+  gap: var(--s3);
+  padding: var(--s4);
+  min-height: var(--topbar-h);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .brand-mark {
-  width: 40px;
-  height: 40px;
+  width: 38px;
+  height: 38px;
   border-radius: var(--radius);
   background: var(--color-primary);
   color: var(--color-primary-contrast);
   display: grid;
   place-items: center;
   font-weight: 700;
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   flex-shrink: 0;
   overflow: hidden;
+  box-shadow: var(--shadow-xs);
 }
 
 .brand-mark img {
@@ -97,180 +247,620 @@ textarea {
   object-fit: cover;
 }
 
+.brand-text {
+  min-width: 0;
+}
+
 .brand-name {
   font-weight: 700;
-  font-size: 1rem;
+  font-size: 0.98rem;
   line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .brand-sub {
-  font-size: 0.75rem;
+  font-size: 0.74rem;
   color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--s3) var(--s3) var(--s4);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-group {
+  margin-top: var(--s4);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-group:first-child {
+  margin-top: 0;
+}
+
+.nav-group-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  letter-spacing: 0.04em;
+  padding: var(--s2) var(--s3) var(--s1);
+  opacity: 0.75;
 }
 
 .nav-link {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: calc(10px * var(--space-unit)) 12px;
-  border-radius: var(--radius);
+  gap: var(--s3);
+  padding: calc(9px * var(--space-unit)) var(--s3);
+  border-radius: var(--radius-sm);
   color: var(--color-text-muted);
   font-weight: 500;
-  transition: background 0.15s, color 0.15s;
+  font-size: 0.92rem;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: start;
+  cursor: pointer;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.nav-link .nav-icon {
+  width: 19px;
+  height: 19px;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.nav-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nav-link:hover {
-  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  background: var(--surface-hover);
   color: var(--color-text);
 }
 
 .nav-link.active {
-  background: var(--color-primary);
-  color: var(--color-primary-contrast);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
+  font-weight: 700;
 }
 
-.nav-icon {
-  width: 20px;
-  text-align: center;
-  font-size: 1.05rem;
+.nav-link.active::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  top: 22%;
+  bottom: 22%;
+  width: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
 }
 
 .sidebar-footer {
-  margin-top: auto;
-  padding-top: 16px;
-  border-top: 1px solid var(--color-border);
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
+  padding: var(--s3) var(--s4) var(--s4);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
 }
 
-.main {
-  padding: calc(28px * var(--space-unit));
-  max-width: 1400px;
-  width: 100%;
+/* --- 5. الشريط العلوي -------------------------------------------------- */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  min-height: var(--topbar-h);
+  padding: 0 var(--s6);
+  background: color-mix(in srgb, var(--color-surface) 86%, transparent);
+  backdrop-filter: saturate(1.6) blur(10px);
+  -webkit-backdrop-filter: saturate(1.6) blur(10px);
+  border-bottom: 1px solid var(--color-border);
 }
+
+.topbar-title {
+  font-weight: 700;
+  font-size: 0.98rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar-spacer {
+  flex: 1;
+}
+
+.topbar-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+/* زر أيقونة للشريط العلوي وخلايا الجداول */
+.icon-btn {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: var(--control-h-sm);
+  height: var(--control-h-sm);
+  min-width: var(--control-h-sm);
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.icon-btn:hover {
+  background: var(--surface-hover);
+  color: var(--color-text);
+}
+
+.icon-btn.bordered {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+}
+
+.dot {
+  position: absolute;
+  top: 4px;
+  inset-inline-end: 4px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: var(--radius-pill);
+  background: var(--color-danger);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+  border: 2px solid var(--color-surface);
+  box-sizing: content-box;
+}
+
+.dot.quiet {
+  background: var(--color-text-muted);
+}
+
+/* قائمة منسدلة عامة — المزرعة، المستخدم، أي قائمة أخرى */
+.menu-anchor {
+  position: relative;
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  inset-inline-end: 0;
+  min-width: 250px;
+  max-width: min(360px, calc(100vw - 32px));
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: var(--s2);
+  z-index: 60;
+  animation: menu-in 0.14s var(--ease);
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.menu-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  padding: var(--s2) var(--s3) var(--s1);
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  width: 100%;
+  padding: var(--s2) var(--s3);
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: start;
+  font-size: 0.9rem;
+  color: var(--color-text);
+  transition: background 0.12s var(--ease);
+}
+
+.menu-item:hover {
+  background: var(--surface-hover);
+}
+
+.menu-item.active {
+  color: var(--color-primary);
+  font-weight: 700;
+}
+
+.menu-item.danger {
+  color: var(--color-danger);
+}
+
+.menu-sep {
+  height: 1px;
+  background: var(--color-border);
+  margin: var(--s2) 0;
+}
+
+.menu-scroll {
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+/* البطاقة الشخصية في القائمة وفي ذيل الشريط */
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  color: var(--color-primary);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 0.82rem;
+  flex-shrink: 0;
+}
+
+.identity {
+  min-width: 0;
+  line-height: 1.35;
+  flex: 1;
+}
+
+.identity-name {
+  font-weight: 600;
+  font-size: 0.88rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.identity-role {
+  font-size: 0.74rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- 6. ترويسة الصفحة -------------------------------------------------- */
 
 .page-head {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--s4);
   flex-wrap: wrap;
-  margin-bottom: calc(24px * var(--space-unit));
+  margin-bottom: var(--s5);
 }
 
 .page-title {
-  font-size: 1.6rem;
+  font-size: 1.5rem;
   font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .page-sub {
   color: var(--color-text-muted);
-  font-size: 0.9rem;
-  margin-top: 4px;
+  font-size: 0.88rem;
+  margin-top: 2px;
+  max-width: 68ch;
 }
 
-/* --- surfaces -------------------------------------------------------- */
+.page-actions {
+  display: flex;
+  gap: var(--s2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* التبويبات والحقول داخل الترويسة عناصر تحكّم، لا كتل لها هامش أسفلها */
+.page-actions .tabs,
+.page-actions .field {
+  margin-bottom: 0;
+}
+
+.section-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin-bottom: var(--s3);
+}
+
+/* --- 7. البطاقات ------------------------------------------------------- */
 
 .card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  padding: var(--pad);
-  box-shadow: var(--shadow);
+  padding: var(--s5);
+  box-shadow: var(--shadow-xs);
 }
 
 .card-title {
   font-weight: 700;
-  font-size: 1rem;
-  margin-bottom: 14px;
+  font-size: 0.98rem;
+  margin-bottom: var(--s4);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--s2);
+}
+
+.card-title .badge {
+  font-weight: 600;
+}
+
+/* بطاقة بلا حشو حول جدول: العنوان محشو والجدول ملتصق بالحواف */
+.card-flush {
+  padding: 0;
+  overflow: hidden;
+}
+
+.card-flush > .card-title {
+  padding: var(--s4) var(--s5);
+  margin: 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.card-flush > .card-body {
+  padding: var(--s5);
+}
+
+.card-flush .table-wrap {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .grid {
   display: grid;
-  gap: calc(16px * var(--space-unit));
+  gap: var(--s4);
 }
 
 .grid-4 {
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
 }
 
 .grid-3 {
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(285px, 1fr));
 }
 
 .grid-2 {
   grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
 }
 
+/* --- 8. الإحصاءات ------------------------------------------------------ */
+
+.stat {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: var(--s4) var(--s5);
+  box-shadow: var(--shadow-xs);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transition: border-color 0.16s var(--ease), box-shadow 0.16s var(--ease);
+}
+
+.stat:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.stat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+
 .stat-label {
   color: var(--color-text-muted);
-  font-size: 0.82rem;
-  margin-bottom: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.stat-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.stat-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.stat-icon.tone-success {
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
+  color: var(--color-success);
+}
+
+.stat-icon.tone-danger {
+  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
+  color: var(--color-danger);
+}
+
+.stat-icon.tone-warning {
+  background: color-mix(in srgb, var(--color-warning) 14%, transparent);
+  color: var(--color-warning);
+}
+
+.stat-icon.tone-info {
+  background: color-mix(in srgb, var(--color-info) 12%, transparent);
+  color: var(--color-info);
+}
+
+.stat-icon.tone-accent {
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  color: var(--color-accent);
 }
 
 .stat-value {
-  font-size: 1.6rem;
+  font-size: 1.55rem;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  margin-top: 2px;
 }
 
 .stat-hint {
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   color: var(--color-text-muted);
-  margin-top: 6px;
+  line-height: 1.6;
 }
 
 .positive {
   color: var(--color-success);
 }
+
 .negative {
   color: var(--color-danger);
 }
+
 .muted {
   color: var(--color-text-muted);
 }
 
-/* --- table ----------------------------------------------------------- */
+/* --- 9. الجداول -------------------------------------------------------- */
 
 .table-wrap {
   overflow-x: auto;
   border-radius: var(--radius);
   border: 1px solid var(--color-border);
   background: var(--color-surface);
+  box-shadow: var(--shadow-xs);
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   white-space: nowrap;
 }
 
 th {
-  text-align: right;
-  padding: 12px 14px;
-  background: color-mix(in srgb, var(--color-primary) 5%, var(--color-surface));
+  text-align: start;
+  padding: var(--s3) var(--s4);
+  background: var(--surface-sunken);
   font-weight: 600;
   color: var(--color-text-muted);
   border-bottom: 1px solid var(--color-border);
-  font-size: 0.82rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 td {
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--color-border);
+  padding: var(--s3) var(--s4);
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
 }
 
 tbody tr:last-child td {
   border-bottom: none;
 }
 
+tbody tr {
+  transition: background 0.12s var(--ease);
+}
+
 tbody tr:hover td {
-  background: color-mix(in srgb, var(--color-primary) 3%, transparent);
+  background: var(--surface-hover);
+}
+
+tfoot td {
+  background: var(--surface-sunken);
+  font-weight: 700;
+  border-top: 1px solid var(--color-border);
+  border-bottom: none;
+}
+
+/* صف قابل للفتح — يُظهر أنه ينقر */
+tr.clickable {
+  cursor: pointer;
+}
+
+/* خلية الأزرار في آخر العمود: لا تتمدّد ولا تلتف */
+td.cell-actions,
+th.cell-actions {
+  width: 1%;
+  white-space: nowrap;
+  text-align: end;
+}
+
+.cell-actions-group {
+  display: inline-flex;
+  gap: var(--s1);
+  justify-content: flex-end;
+  align-items: center;
+}
+
+/* جدول داخل جدول (بنود القيد) — بلا إطار وبخلفية أهدأ */
+.subtable-cell {
+  background: var(--surface-sunken) !important;
+  padding: 0 !important;
+}
+
+.subtable {
+  font-size: 0.84rem;
+}
+
+.subtable th {
+  background: transparent;
+  border-bottom-color: var(--border-subtle);
+}
+
+.subtable td {
+  border-bottom-color: var(--border-subtle);
+}
+
+.subtable tbody tr:hover td {
+  background: transparent;
 }
 
 .num {
@@ -278,36 +868,88 @@ tbody tr:hover td {
   font-feature-settings: "tnum";
 }
 
-/* --- controls -------------------------------------------------------- */
+.strong {
+  font-weight: 600;
+}
+
+/* رابط داخل جدول: يقرأ كرابط بلا زخرفة صاخبة */
+.link {
+  color: var(--color-primary);
+  font-weight: 600;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.14s var(--ease);
+}
+
+.link:hover {
+  border-bottom-color: currentColor;
+}
+
+/* --- 10. الأزرار ------------------------------------------------------- */
 
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: calc(10px * var(--space-unit)) 18px;
-  border-radius: var(--radius);
+  gap: var(--s2);
+  height: var(--control-h);
+  padding: 0 var(--s5);
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   background: var(--color-primary);
   color: var(--color-primary-contrast);
   font-weight: 600;
+  font-size: 0.9rem;
   cursor: pointer;
-  transition: filter 0.15s, opacity 0.15s;
+  white-space: nowrap;
+  box-shadow: var(--shadow-xs);
+  transition: filter 0.15s var(--ease), background 0.15s var(--ease),
+    box-shadow 0.15s var(--ease), transform 0.08s var(--ease), opacity 0.15s var(--ease);
 }
 
 .btn:hover:not(:disabled) {
-  filter: brightness(1.08);
+  filter: brightness(1.09);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: var(--shadow-xs);
 }
 
 .btn:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
   cursor: not-allowed;
+  box-shadow: none;
+}
+
+.btn svg {
+  width: 17px;
+  height: 17px;
 }
 
 .btn-ghost {
-  background: transparent;
+  background: var(--color-surface);
   color: var(--color-text);
   border-color: var(--color-border);
+  box-shadow: none;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  filter: none;
+  background: var(--surface-sunken);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-xs);
+}
+
+.btn-subtle {
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
+  box-shadow: none;
+}
+
+.btn-subtle:hover:not(:disabled) {
+  filter: none;
+  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
 }
 
 .btn-danger {
@@ -315,72 +957,265 @@ tbody tr:hover td {
   color: #fff;
 }
 
-.btn-sm {
-  padding: 6px 12px;
-  font-size: 0.85rem;
+.btn-danger-ghost {
+  background: transparent;
+  color: var(--color-danger);
+  border-color: color-mix(in srgb, var(--color-danger) 32%, transparent);
+  box-shadow: none;
 }
+
+.btn-danger-ghost:hover:not(:disabled) {
+  filter: none;
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+}
+
+.btn-danger:focus-visible,
+.btn-danger-ghost:focus-visible {
+  box-shadow: var(--ring-danger);
+}
+
+.btn-sm {
+  height: var(--control-h-sm);
+  padding: 0 var(--s3);
+  font-size: 0.82rem;
+  gap: var(--s1);
+}
+
+.btn-sm svg {
+  width: 15px;
+  height: 15px;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+/* مجموعة أزرار */
+.btn-row {
+  display: flex;
+  gap: var(--s2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* --- 11. الحقول ------------------------------------------------------- */
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-bottom: 14px;
+  gap: var(--s1);
+  margin-bottom: var(--s4);
+  min-width: 0;
 }
 
 .field label {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--color-text-muted);
 }
 
 .field input,
 .field select,
-.field textarea {
-  padding: calc(10px * var(--space-unit)) 12px;
+.field textarea,
+.input {
+  height: var(--control-h);
+  padding: 0 var(--s3);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
   background: var(--color-surface);
   color: var(--color-text);
   outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  font-size: 0.92rem;
+  width: 100%;
+  min-width: 0;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease),
+    background 0.15s var(--ease);
+}
+
+.field textarea {
+  height: auto;
+  min-height: 84px;
+  padding: var(--s3);
+  line-height: 1.7;
+  resize: vertical;
+}
+
+.field input::placeholder,
+.field textarea::placeholder {
+  color: color-mix(in srgb, var(--color-text-muted) 70%, transparent);
+}
+
+.field input:hover:not(:disabled),
+.field select:hover:not(:disabled),
+.field textarea:hover:not(:disabled) {
+  border-color: var(--border-strong);
 }
 
 .field input:focus,
 .field select:focus,
-.field textarea:focus {
+.field textarea:focus,
+.input:focus {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 18%, transparent);
+  box-shadow: var(--ring);
+}
+
+.field input:disabled,
+.field select:disabled,
+.field textarea:disabled {
+  background: var(--surface-sunken);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
+
+/* سهم موحّد للقوائم بدل سهم النظام */
+.field select,
+select.input {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-inline-end: var(--s8);
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left var(--s3) center;
+  background-size: 16px;
+  cursor: pointer;
 }
 
 .field input[type="color"] {
   padding: 4px;
-  height: 42px;
+  height: var(--control-h);
   cursor: pointer;
 }
 
+.field input[type="date"],
+.field input[type="number"] {
+  font-variant-numeric: tabular-nums;
+}
+
+.field input[type="checkbox"],
+.field input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.field-hint {
+  font-size: 0.74rem;
+  color: var(--color-text-muted);
+}
+
+.field-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--s2);
+}
+
+/* صف حقول يلتف من تلقائه */
 .row {
   display: flex;
-  gap: 12px;
+  gap: var(--s3);
   flex-wrap: wrap;
   align-items: flex-end;
 }
 
 .row > * {
-  flex: 1 1 160px;
+  flex: 1 1 170px;
+  min-width: 0;
 }
 
+.row .field {
+  margin-bottom: 0;
+}
+
+.row-wide {
+  flex: 2 1 260px;
+}
+
+/* النموذج داخل بطاقة: مسافة موحّدة بين الحقول وزر الحفظ */
+.form-actions {
+  display: flex;
+  gap: var(--s2);
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: var(--s5);
+}
+
+/* --- 12. شريط الأدوات (بحث + فلاتر) ------------------------------------ */
+
+.toolbar {
+  display: flex;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  align-items: flex-end;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: var(--s4);
+  box-shadow: var(--shadow-xs);
+  margin-bottom: var(--s4);
+}
+
+.toolbar > .field {
+  margin-bottom: 0;
+  flex: 1 1 165px;
+  min-width: 0;
+}
+
+.toolbar .field-search {
+  flex: 2 1 240px;
+}
+
+/* حقل بحث بأيقونة داخله */
+.search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search svg {
+  position: absolute;
+  inset-inline-start: var(--s3);
+  width: 17px;
+  height: 17px;
+  color: var(--color-text-muted);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.search input {
+  padding-inline-start: var(--s8);
+}
+
+/* عدّاد نتائج صغير */
+.result-count {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* --- 13. الشارات ------------------------------------------------------- */
+
 .badge {
-  display: inline-block;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 0.74rem;
   font-weight: 600;
-  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  line-height: 1.7;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--color-primary) 11%, transparent);
   color: var(--color-primary);
 }
 
+.badge-success {
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
+  color: var(--color-success);
+}
+
 .badge-danger {
-  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
+  background: color-mix(in srgb, var(--color-danger) 11%, transparent);
   color: var(--color-danger);
 }
 
@@ -389,63 +1224,414 @@ tbody tr:hover td {
   color: var(--color-warning);
 }
 
+.badge-info {
+  background: color-mix(in srgb, var(--color-info) 11%, transparent);
+  color: var(--color-info);
+}
+
+.badge-accent {
+  background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+  color: color-mix(in srgb, var(--color-accent) 78%, #000);
+}
+
 .badge-muted {
   background: color-mix(in srgb, var(--color-text-muted) 12%, transparent);
   color: var(--color-text-muted);
 }
 
+.badge-dot::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* --- 14. التنبيهات ----------------------------------------------------- */
+
 .alert {
-  padding: 12px 14px;
-  border-radius: var(--radius);
-  margin-bottom: 14px;
-  font-size: 0.9rem;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--s4);
+  font-size: 0.88rem;
+  line-height: 1.7;
   border: 1px solid;
 }
 
+.alert > svg {
+  width: 18px;
+  height: 18px;
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
 .alert-error {
-  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
-  border-color: color-mix(in srgb, var(--color-danger) 30%, transparent);
-  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 7%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-danger) 26%, transparent);
+  color: color-mix(in srgb, var(--color-danger) 88%, var(--color-text));
 }
 
 .alert-ok {
-  background: color-mix(in srgb, var(--color-success) 8%, transparent);
-  border-color: color-mix(in srgb, var(--color-success) 30%, transparent);
-  color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 7%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-success) 26%, transparent);
+  color: color-mix(in srgb, var(--color-success) 88%, var(--color-text));
 }
+
+.alert-warning {
+  background: color-mix(in srgb, var(--color-warning) 8%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-warning) 28%, transparent);
+  color: color-mix(in srgb, var(--color-warning) 88%, var(--color-text));
+}
+
+.alert-info {
+  background: color-mix(in srgb, var(--color-info) 6%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-info) 24%, transparent);
+  color: color-mix(in srgb, var(--color-info) 88%, var(--color-text));
+}
+
+/* سطر تنبيه قابل للنقر في اللوحة أو القائمة */
+.alert-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  padding: var(--s3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: inherit;
+  transition: background 0.14s var(--ease), border-color 0.14s var(--ease);
+}
+
+.alert-row:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.alert-row-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.alert-mark {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 8px;
+  flex-shrink: 0;
+}
+
+.alert-mark.danger {
+  background: var(--color-danger);
+}
+
+.alert-mark.warning {
+  background: var(--color-warning);
+}
+
+.alert-mark.info {
+  background: var(--color-info);
+}
+
+/* --- 15. الفراغ والتحميل ----------------------------------------------- */
 
 .empty {
-  padding: 40px 20px;
+  padding: var(--s10) var(--s5);
   text-align: center;
   color: var(--color-text-muted);
+  font-size: 0.9rem;
 }
 
-/* --- login ----------------------------------------------------------- */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s10) var(--s5);
+  text-align: center;
+}
+
+.empty-state > svg {
+  width: 34px;
+  height: 34px;
+  color: var(--color-text-muted);
+  opacity: 0.5;
+  margin-bottom: var(--s1);
+}
+
+.empty-state-title {
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.empty-state-text {
+  font-size: 0.86rem;
+  color: var(--color-text-muted);
+  max-width: 46ch;
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface-sunken) 25%,
+    color-mix(in srgb, var(--color-text) 7%, var(--color-surface)) 37%,
+    var(--surface-sunken) 63%
+  );
+  background-size: 400% 100%;
+  animation: shimmer 1.3s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+  height: 14px;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+.skeleton-stack {
+  display: grid;
+  gap: var(--s3);
+}
+
+/* دوّار صغير للأزرار وحالات الانتظار */
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* --- 16. التبويبات ----------------------------------------------------- */
+
+.tabs {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--s4);
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.tab {
+  padding: 0 var(--s4);
+  height: var(--control-h-sm);
+  border-radius: calc(var(--radius-sm) - 2px);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.tab:hover:not(.active) {
+  color: var(--color-text);
+}
+
+.tab.active {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  box-shadow: var(--shadow-xs);
+}
+
+/* --- 17. النوافذ ------------------------------------------------------- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, #0b1220 62%, transparent);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s5);
+  z-index: 100;
+  animation: fade-in 0.16s var(--ease);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--s6);
+  width: min(480px, 100%);
+  max-height: 88vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+  animation: modal-in 0.18s var(--ease);
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.modal-title {
+  font-size: 1.12rem;
+  font-weight: 700;
+  margin-bottom: var(--s2);
+}
+
+.modal-message {
+  color: var(--color-text-muted);
+  margin: 0 0 var(--s4);
+  line-height: 1.75;
+  font-size: 0.9rem;
+}
+
+.modal-actions {
+  display: flex;
+  gap: var(--s2);
+  justify-content: flex-start;
+  margin-top: var(--s5);
+}
+
+/* --- 18. الدخول -------------------------------------------------------- */
 
 .login-page {
   min-height: 100vh;
   display: grid;
   place-items: center;
-  padding: 24px;
-  background: linear-gradient(
-    160deg,
-    color-mix(in srgb, var(--color-primary) 12%, var(--color-background)),
-    var(--color-background)
-  );
+  padding: var(--s6);
+  background: radial-gradient(
+      1100px 520px at 80% -10%,
+      color-mix(in srgb, var(--color-primary) 16%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      900px 480px at 10% 110%,
+      color-mix(in srgb, var(--color-accent) 12%, transparent),
+      transparent 70%
+    ),
+    var(--color-background);
 }
 
 .login-card {
   width: 100%;
   max-width: 400px;
   background: var(--color-surface);
-  border-radius: calc(var(--radius) * 1.5);
-  padding: 32px;
-  box-shadow: var(--shadow);
+  border-radius: var(--radius-lg);
+  padding: var(--s8);
+  box-shadow: var(--shadow-md);
   border: 1px solid var(--color-border);
 }
 
-/* --- theme builder preview -------------------------------------------- */
+/* --- 19. أدوات مساعدة -------------------------------------------------- */
 
+.stack {
+  display: grid;
+  gap: var(--s3);
+}
+
+.stack-sm {
+  display: grid;
+  gap: var(--s2);
+}
+
+.stack-lg {
+  display: grid;
+  gap: var(--s5);
+}
+
+.inline {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex-wrap: wrap;
+}
+
+.between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  flex-wrap: wrap;
+}
+
+.push-end {
+  margin-inline-start: auto;
+}
+
+.mt-4 {
+  margin-top: var(--s4);
+}
+
+.mt-5 {
+  margin-top: var(--s5);
+}
+
+.mb-4 {
+  margin-bottom: var(--s4);
+}
+
+.mb-5 {
+  margin-bottom: var(--s5);
+}
+
+.text-sm {
+  font-size: 0.84rem;
+}
+
+.text-end {
+  text-align: end;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.divider {
+  height: 1px;
+  background: var(--color-border);
+  margin: var(--s4) 0;
+}
+
+/* لوح ألوان معاينة الهوية */
 .preview {
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
@@ -453,121 +1639,110 @@ tbody tr:hover td {
 }
 
 .preview-head {
-  padding: 14px 16px;
+  padding: var(--s4);
   font-weight: 700;
 }
 
 .preview-body {
-  padding: 16px;
+  padding: var(--s4);
   display: grid;
-  gap: 12px;
+  gap: var(--s3);
 }
 
 .swatch-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 10px;
+  gap: var(--s2);
 }
 
-.tabs {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 18px;
-  flex-wrap: wrap;
+/* --- 20. الاستجابة ----------------------------------------------------- */
+
+.nav-backdrop {
+  display: none;
 }
 
-.tab {
-  padding: 8px 16px;
-  border-radius: 999px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 0.88rem;
-  color: var(--color-text-muted);
-}
-
-.tab.active {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: var(--color-primary-contrast);
+@media (max-width: 1024px) {
+  .main {
+    padding: var(--s5) var(--s5) var(--s8);
+  }
+  .topbar {
+    padding: 0 var(--s4);
+  }
 }
 
 @media (max-width: 900px) {
-  .shell {
-    grid-template-columns: 1fr;
+  .app {
+    grid-template-columns: minmax(0, 1fr);
   }
+
+  /* الشريط يصير درجًا ينزلق من جهة البداية بدل أن يزاحم المحتوى */
   .sidebar {
-    position: static;
-    height: auto;
-    flex-direction: row;
-    overflow-x: auto;
-    border-inline-start: none;
-    border-bottom: 1px solid var(--color-border);
+    position: fixed;
+    inset-block: 0;
+    inset-inline-start: 0;
+    width: min(300px, 84vw);
+    transform: translateX(-100%);
+    transition: transform 0.24s var(--ease);
+    z-index: 90;
   }
-  .brand,
-  .sidebar-footer {
-    display: none;
+
+  [dir="rtl"] .sidebar {
+    transform: translateX(100%);
   }
+
+  .sidebar.open,
+  [dir="rtl"] .sidebar.open {
+    transform: none;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: color-mix(in srgb, #0b1220 45%, transparent);
+    z-index: 80;
+    animation: fade-in 0.16s var(--ease);
+  }
+
   .main {
-    padding: 16px;
+    padding: var(--s4) var(--s4) var(--s8);
+  }
+
+  .page-title {
+    font-size: 1.28rem;
+  }
+
+  .modal {
+    padding: var(--s5);
   }
 }
 
-/* --- confirmation dialog -------------------------------------------------
-   Sits above everything and dims the page behind it, so the only thing left
-   to do is read the sentence and answer it. */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  z-index: 100;
+@media (min-width: 901px) {
+  .only-mobile {
+    display: none !important;
+  }
 }
 
-.modal {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  padding: 22px;
-  width: min(460px, 100%);
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+@media (max-width: 620px) {
+  .page-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .page-actions .btn {
+    flex: 1 1 auto;
+  }
+
+  .stat-value {
+    font-size: 1.35rem;
+  }
 }
 
-.modal-title {
-  font-size: 1.15rem;
-  font-weight: 700;
-  margin-bottom: 8px;
-}
-
-.modal-message {
-  color: var(--color-text-muted);
-  margin: 0 0 14px;
-  line-height: 1.7;
-}
-
-.modal-actions {
-  display: flex;
-  gap: 10px;
-  justify-content: flex-start;
-  margin-top: 18px;
-}
-
-/* --------------------------------------------------------------------------
-   Printing
-   --------------------------------------------------------------------------
-   A report printed from the browser is the PDF. Generating one on the server
-   would mean shipping an Arabic font and a heavy library to a free host to
-   reproduce what the browser already renders correctly, right-to-left and all.
-
-   So printing hides the furniture — sidebar, buttons, forms — and leaves the
-   numbers on white paper.
--------------------------------------------------------------------------- */
+/* --- 21. الطباعة -------------------------------------------------------
+   التقرير المطبوع من المتصفح هو الـ PDF. الطباعة تخفي الأثاث — الشريط
+   والأزرار والنماذج — وتترك الأرقام على ورق أبيض.
+   -------------------------------------------------------------------- */
 @media print {
   @page {
     margin: 14mm;
@@ -579,24 +1754,31 @@ tbody tr:hover td {
   }
 
   .sidebar,
+  .topbar,
   .tabs,
+  .toolbar,
   .btn,
+  .icon-btn,
+  .menu,
   .modal-backdrop,
+  .nav-backdrop,
   form.card,
   .no-print {
     display: none !important;
   }
 
-  .shell {
+  .app {
     display: block;
   }
 
   .main {
     padding: 0;
     max-width: none;
+    animation: none;
   }
 
   .card,
+  .stat,
   .table-wrap {
     border: 1px solid #999;
     box-shadow: none;
@@ -612,6 +1794,11 @@ tbody tr:hover td {
     font-size: 11pt;
   }
 
+  th {
+    background: #f1f1f1 !important;
+    color: #000;
+  }
+
   thead {
     display: table-header-group;
   }
@@ -621,7 +1808,7 @@ tbody tr:hover td {
     color: inherit;
   }
 
-  /* The page title carries the farm name so a printed sheet stands alone. */
+  /* عنوان الصفحة يحمل اسم المزرعة فتقف الورقة المطبوعة وحدها */
   .page-title::after {
     content: " — " attr(data-farm);
     font-weight: 400;
