@@ -212,7 +212,7 @@ cd android
 عبر المتجر)، وتوزيع داخلي.
 
 ```bash
-cd D:arm\mobile
+cd D:\farm\mobile
 npx eas-cli login                                  # مرة واحدة — تسجيل تفاعلي
 npx eas-cli build -p android --profile preview     # يعيد رابط تنزيل APK
 ```
