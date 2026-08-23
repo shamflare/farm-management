@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, getCached } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 import Icon from "@/components/Icon";
 import {
@@ -64,8 +64,10 @@ export default function FieldsPage() {
   const readOnly = !can("settings.edit");
 
   async function load() {
-    const data = await api.get<Page<Field>>(`/fields/?entity=${entity}&page_size=100&ordering=sort_order`);
-    setFields(data.results.sort((a, b) => a.sort_order - b.sort_order));
+    await getCached<Page<Field>>(
+      `/fields/?entity=${entity}&page_size=100&ordering=sort_order`,
+      (data) => setFields(data.results.sort((a, b) => a.sort_order - b.sort_order))
+    );
   }
 
   useEffect(() => {

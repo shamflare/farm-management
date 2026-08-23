@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { api, download, formatDate, money } from "@/lib/api";
+import { api, download, formatDate, getCached, hasCache, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 import Attachments from "@/components/Attachments";
 import Icon from "@/components/Icon";
@@ -69,10 +69,12 @@ export default function PurchasesPage() {
   }, [catalog]);
 
   async function load() {
-    setLoading(true);
+    setLoading(!hasCache("/purchases/?page_size=50&ordering=-happened_on"));
     try {
-      const data = await api.get<Page<Purchase>>("/purchases/?page_size=50&ordering=-happened_on");
-      setRows(data.results);
+      await getCached<Page<Purchase>>("/purchases/?page_size=50&ordering=-happened_on", (data) => {
+        setRows(data.results);
+        setLoading(false);
+      });
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -82,12 +84,13 @@ export default function PurchasesPage() {
 
   useEffect(() => {
     load();
-    api.get<Page<Catalog>>("/catalog/?page_size=300").then((r) => setCatalog(r.results)).catch(() => {});
-    api
-      .get<{ data: Account[] }>("/accounts/pickable/")
-      .then((r) => setAccounts(r.data.filter((a) => a.is_cash)))
-      .catch(() => {});
-    api.get<Page<Party>>("/parties/?page_size=200").then((r) => setParties(r.results)).catch(() => {});
+    getCached<Page<Catalog>>("/catalog/?page_size=300", (r) => setCatalog(r.results)).catch(
+      () => {}
+    );
+    getCached<{ data: Account[] }>("/accounts/pickable/", (r) =>
+      setAccounts(r.data.filter((a) => a.is_cash))
+    ).catch(() => {});
+    getCached<Page<Party>>("/parties/?page_size=200", (r) => setParties(r.results)).catch(() => {});
   }, []);
 
   const total = rows.reduce((sum, row) => sum + Number(row.total_cost), 0);

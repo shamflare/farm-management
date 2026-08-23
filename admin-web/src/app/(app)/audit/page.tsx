@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
-import { api, formatDateTime, formatNumber } from "@/lib/api";
+import { api, formatDateTime, formatNumber, getCached, hasCache } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 import Icon from "@/components/Icon";
 import { ErrorNote, PageHeader, TableMessage } from "@/components/ui";
@@ -85,15 +85,14 @@ export default function AuditPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    setLoading(true);
     const params = new URLSearchParams({ page_size: "60" });
     if (action) params.set("action", action);
-    api
-      .get<Page<Log>>(`/audit/?${params}`)
-      .then((data) => {
-        setRows(data.results);
-        setCount(data.count);
-      })
+    const path = `/audit/?${params}`;
+    setLoading(!hasCache(path));
+    getCached<Page<Log>>(path, (data) => {
+      setRows(data.results);
+      setCount(data.count);
+    })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [action]);

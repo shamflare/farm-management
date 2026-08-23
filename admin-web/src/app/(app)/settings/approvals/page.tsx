@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, download, formatDateTime, money } from "@/lib/api";
+import { api, download, formatDateTime, getCached, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 import Icon from "@/components/Icon";
 import {
@@ -52,17 +52,15 @@ export default function ApprovalsAndBackupPage() {
   const [notice, setNotice] = useState("");
 
   async function load() {
-    const data = await api.get<Page<Rule>>("/approval-rules/?page_size=50");
-    setRules(data.results);
+    await getCached<Page<Rule>>("/approval-rules/?page_size=50", (data) => setRules(data.results));
   }
 
   useEffect(() => {
     if (can("finance.view")) load().catch((err) => setError(err.message));
     if (can("backup.export")) {
-      api
-        .get<{ data: Summary }>("/backup/summary/")
-        .then((res) => setSummary(res.data))
-        .catch(() => {});
+      getCached<{ data: Summary }>("/backup/summary/", (res) => setSummary(res.data)).catch(
+        () => {}
+      );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { api } from "@/lib/api";
+import { api, getCached } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 import Icon from "@/components/Icon";
 import {
@@ -49,13 +49,15 @@ export default function ListsPage() {
   }, [items]);
 
   async function loadTypes() {
-    const data = await api.get<Page<CatalogType>>("/catalog-types/?page_size=100");
-    setTypes(data.results);
+    await getCached<Page<CatalogType>>("/catalog-types/?page_size=100", (data) =>
+      setTypes(data.results)
+    );
   }
 
   async function loadItems() {
-    const data = await api.get<Page<Item>>(`/catalog/?type=${active}&page_size=200`);
-    setItems(data.results);
+    await getCached<Page<Item>>(`/catalog/?type=${active}&page_size=200`, (data) =>
+      setItems(data.results)
+    );
   }
 
   useEffect(() => {

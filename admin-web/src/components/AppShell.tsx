@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { api, clearSession, getToken } from "@/lib/api";
+import { api, clearSession, getCached, getToken } from "@/lib/api";
 import { applyTheme, FALLBACK_TOKENS, ThemeTokens } from "@/lib/theme";
 import Icon, { IconName } from "@/components/Icon";
 
@@ -17,7 +17,7 @@ type Alert = {
 };
 
 type Me = {
-  user: { id: string; username: string; full_name: string };
+  user: { id: string; username: string; full_name: string; phone?: string };
   farm: { id: string; name: string; slug: string; base_currency: { code: string; symbol: string } };
   farms: { id: string; slug: string; name: string }[];
   role: { display_name: string } | null;
@@ -169,19 +169,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const closeMenu = useCallback(() => setOpenMenu(null), []);
   const menuRef = useDismiss(closeMenu);
 
+  // الهوية والسمة من المحفوظ أولًا: الشاشة تُرسم بها فورًا ثم يُصحّحها الرد
+  // الطازج إن تغيّر شيء. هذا ما يزيل «جارٍ التحميل…» من كل فتح للوحة.
   async function loadMe() {
-    const data = await api.get<Me>("/auth/me/");
-    setMe(data);
-    applyTheme(data.theme ?? FALLBACK_TOKENS);
+    await getCached<Me>("/auth/me/", (data) => {
+      setMe(data);
+      applyTheme(data.theme ?? FALLBACK_TOKENS);
+    });
   }
 
   async function loadAlerts() {
     try {
-      const data = await api.get<{ data: { alerts: Alert[] } }>("/alerts/");
-      setAlerts(data.data.alerts);
+      await getCached<{ data: { alerts: Alert[] } }>("/alerts/", (data) =>
+        setAlerts(data.data.alerts)
+      );
     } catch {
       // التنبيهات خدمة إضافية؛ لا يجوز أن تمنع الشاشة من الظهور.
-      setAlerts([]);
     }
   }
 
@@ -190,9 +193,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       router.replace("/login");
       return;
     }
-    loadMe()
-      .then(loadAlerts)
-      .catch((err) => setError(err.message));
+    // الطلبان مستقلان، فيُرسلان معًا؛ لا معنى لأن ينتظر أحدهما الآخر.
+    loadMe().catch((err) => setError(err.message));
+    loadAlerts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

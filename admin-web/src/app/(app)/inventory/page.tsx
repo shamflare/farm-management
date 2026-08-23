@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { api, download, formatDate, formatNumber, money } from "@/lib/api";
+import { api, download, formatDate, formatNumber, getCached, hasCache, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 import Icon from "@/components/Icon";
 import {
@@ -108,17 +108,20 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(true);
 
   async function loadAll() {
-    setLoading(true);
+    setLoading(!hasCache("/stock-balance/"));
     try {
-      const [balance, storeRows, itemRows] = await Promise.all([
-        api.get<{ data: { stores: StoreBalance[]; total_value: string } }>("/stock-balance/"),
-        api.get<Page<Store>>("/stores/?page_size=100"),
-        api.get<Page<Item>>("/inventory-items/?page_size=200"),
+      await Promise.all([
+        getCached<{ data: { stores: StoreBalance[]; total_value: string } }>(
+          "/stock-balance/",
+          (balance) => {
+            setBalances(balance.data.stores);
+            setTotalValue(balance.data.total_value);
+            setLoading(false);
+          }
+        ),
+        getCached<Page<Store>>("/stores/?page_size=100", (rows) => setStores(rows.results)),
+        getCached<Page<Item>>("/inventory-items/?page_size=200", (rows) => setItems(rows.results)),
       ]);
-      setBalances(balance.data.stores);
-      setTotalValue(balance.data.total_value);
-      setStores(storeRows.results);
-      setItems(itemRows.results);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -129,20 +132,19 @@ export default function InventoryPage() {
   async function loadMovements() {
     const params = new URLSearchParams({ page_size: "40", ordering: "-happened_on" });
     if (storeFilter) params.set("store", storeFilter);
-    const data = await api.get<Page<Movement>>(`/stock-movements/?${params}`);
-    setMovements(data.results);
+    await getCached<Page<Movement>>(`/stock-movements/?${params}`, (data) =>
+      setMovements(data.results)
+    );
   }
 
   useEffect(() => {
     loadAll();
-    api
-      .get<{ data: Account[] }>("/accounts/pickable/")
-      .then((res) => setAccounts(res.data.filter((a) => a.is_cash)))
-      .catch(() => {});
-    api
-      .get<Page<Party>>("/parties/?page_size=200")
-      .then((res) => setParties(res.results))
-      .catch(() => {});
+    getCached<{ data: Account[] }>("/accounts/pickable/", (res) =>
+      setAccounts(res.data.filter((a) => a.is_cash))
+    ).catch(() => {});
+    getCached<Page<Party>>("/parties/?page_size=200", (res) => setParties(res.results)).catch(
+      () => {}
+    );
     api
       .get<Page<Catalog>>("/catalog/?page_size=300")
       .then((res) => setCatalog(res.results))

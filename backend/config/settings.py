@@ -122,6 +122,21 @@ else:
 
 AUTH_USER_MODEL = "accounts.User"
 
+# Argon2 first, PBKDF2 behind it.
+#
+# Django's default PBKDF2 runs 870,000 SHA-256 rounds, which cost a full second
+# on the machine this farm runs on - and that second was the whole of "جارٍ
+# الدخول…". Argon2 is Django's own recommendation, gives stronger resistance to
+# GPU cracking, and answers in tens of milliseconds. The old hashers stay in the
+# list so existing passwords keep working; each one is re-hashed to Argon2 the
+# next time its owner signs in.
+PASSWORD_HASHERS = [
+    "django.contrib.auth.hashers.Argon2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
+    "django.contrib.auth.hashers.ScryptPasswordHasher",
+]
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},

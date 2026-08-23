@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, download, formatDate, formatNumber, money } from "@/lib/api";
+import { api, download, formatDate, formatNumber, getCached, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 import Icon from "@/components/Icon";
 import {
@@ -84,32 +84,30 @@ export default function MilkPage() {
   const breeding = branches.find((b) => b.code === "breeding");
 
   async function loadSummary() {
-    const data = await api.get<Summary>(`/reports/milk/?period=${period}`);
-    setSummary(data);
+    await getCached<Summary>(`/reports/milk/?period=${period}`, (data) => setSummary(data));
   }
 
   async function loadRows() {
-    const [prod, sold] = await Promise.all([
-      api.get<Page<Production>>("/milk/?page_size=40&ordering=-happened_on"),
-      api.get<Page<Sale>>("/milk-sales/?page_size=40&ordering=-happened_on"),
+    await Promise.all([
+      getCached<Page<Production>>("/milk/?page_size=40&ordering=-happened_on", (prod) =>
+        setProduction(prod.results)
+      ),
+      getCached<Page<Sale>>("/milk-sales/?page_size=40&ordering=-happened_on", (sold) =>
+        setSales(sold.results)
+      ),
     ]);
-    setProduction(prod.results);
-    setSales(sold.results);
   }
 
   useEffect(() => {
-    api
-      .get<Page<Catalog>>("/catalog/?page_size=300")
-      .then((res) => setCatalog(res.results))
-      .catch((err) => setError(err.message));
-    api
-      .get<{ data: Account[] }>("/accounts/pickable/")
-      .then((res) => setAccounts(res.data.filter((a) => a.is_cash)))
-      .catch(() => {});
-    api
-      .get<Page<Party>>("/parties/?page_size=200")
-      .then((res) => setCustomers(res.results.filter((p) => p.kind === "customer" || p.kind === "other")))
-      .catch(() => {});
+    getCached<Page<Catalog>>("/catalog/?page_size=300", (res) => setCatalog(res.results)).catch(
+      (err) => setError(err.message)
+    );
+    getCached<{ data: Account[] }>("/accounts/pickable/", (res) =>
+      setAccounts(res.data.filter((a) => a.is_cash))
+    ).catch(() => {});
+    getCached<Page<Party>>("/parties/?page_size=200", (res) =>
+      setCustomers(res.results.filter((p) => p.kind === "customer" || p.kind === "other"))
+    ).catch(() => {});
     loadRows().catch((err) => setError(err.message));
   }, []);
 

@@ -22,12 +22,15 @@ export function getFarm() {
 }
 
 export function setSession(session: Session) {
+  // دخول جديد يبدأ من صفحة بيضاء: ما حُفظ لمستخدم سابق لا يُعرض لهذا.
+  clearCache();
   localStorage.setItem(TOKEN_KEY, session.access);
   localStorage.setItem(REFRESH_KEY, session.refresh);
   if (session.farms?.length) localStorage.setItem(FARM_KEY, session.farms[0].slug);
 }
 
 export function clearSession() {
+  clearCache();
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_KEY);
   localStorage.removeItem(FARM_KEY);
@@ -68,6 +71,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (farm) headers["X-Farm"] = farm;
 
   const response = await fetch(`${BASE}${path}`, { ...options, headers, cache: "no-store" });
+
+  // أي كتابة ناجحة تُبطل المحفوظ كله: قيد واحد يغيّر الأرصدة والتقارير
+  // والتنبيهات معًا، فالأسلم أن يُعاد طلب ما يُعرض بعده لا أن يُخمَّن.
+  if (response.ok && options.method && options.method !== "GET") clearCache();
+
   if (response.status === 204) return undefined as T;
 
   const text = await response.text();
@@ -80,6 +88,93 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw new ApiError(response.status, body);
   }
   return body as T;
+}
+
+/* --- الذاكرة القريبة ---------------------------------------------------
+ *
+ * المشكلة التي تحلّها: كل قسم كان يبدأ من الصفر — تُفتح الشاشة، تُطلب
+ * البيانات، ويُنتظر الرد قبل رسم أي شيء، فيرى المستخدم «جارٍ التحميل…» في كل
+ * مرة يتنقّل فيها ولو كانت البيانات نفسها التي رآها قبل ثانية.
+ *
+ * الحل: يُحفظ آخر رد ناجح لكل مسار. عند فتح القسم مرة أخرى يُرسم من المحفوظ
+ * فورًا (بلا انتظار شبكة)، ثم يُطلب الرد الطازج بهدوء ويُستبدل ما على الشاشة
+ * إن اختلف. القاعدة: لا تُظهر انتظارًا عندك ما تعرضه.
+ *
+ * المخزن sessionStorage: يعيش مع التبويب ويموت بإغلاقه، فلا تبقى بيانات مزرعة
+ * على جهاز مشترك بعد انتهاء الجلسة. والذاكرة الحيّة أمامه تخدم القراءة
+ * المتكررة داخل نفس الصفحة بلا تحويل نصّي.
+ */
+
+const cache = new Map<string, unknown>();
+const CACHE_PREFIX = "farm.cache:";
+
+function cacheKey(path: string) {
+  return `${CACHE_PREFIX}${getFarm() ?? "-"}:${path}`;
+}
+
+export function readCache<T>(path: string): T | undefined {
+  const key = cacheKey(path);
+  if (cache.has(key)) return cache.get(key) as T;
+  if (typeof window === "undefined") return undefined;
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return undefined;
+    const value = JSON.parse(raw) as T;
+    cache.set(key, value);
+    return value;
+  } catch {
+    return undefined;
+  }
+}
+
+export function hasCache(path: string) {
+  return readCache(path) !== undefined;
+}
+
+function writeCache(path: string, value: unknown) {
+  const key = cacheKey(path);
+  cache.set(key, value);
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // امتلأ المخزن أو مُنع: الذاكرة الحيّة وحدها تكفي.
+  }
+}
+
+/** يمسح المحفوظ بعد أي تعديل، حتى لا يعود القسم يعرض ما قبل التعديل. */
+export function clearCache(prefix?: string) {
+  const scope = prefix ? cacheKey(prefix) : CACHE_PREFIX;
+  for (const key of Array.from(cache.keys())) {
+    if (key.startsWith(scope)) cache.delete(key);
+  }
+  if (typeof window === "undefined") return;
+  try {
+    for (let i = sessionStorage.length - 1; i >= 0; i -= 1) {
+      const key = sessionStorage.key(i);
+      if (key && key.startsWith(scope)) sessionStorage.removeItem(key);
+    }
+  } catch {
+    // لا شيء يُفعل؛ الذاكرة الحيّة نُظّفت.
+  }
+}
+
+/**
+ * اطلب المسار واعرضه مرتين: من المحفوظ حالًا، ومن الشبكة حين يصل.
+ *
+ * `apply` تُنادى فورًا إن وُجد محفوظ (`fresh=false`) ثم تُنادى بالرد الطازج
+ * (`fresh=true`). إن لم يوجد محفوظ فنداء واحد فقط، بعد الرد.
+ */
+export async function getCached<T>(
+  path: string,
+  apply: (data: T, fresh: boolean) => void
+): Promise<T> {
+  const hit = readCache<T>(path);
+  if (hit !== undefined) apply(hit, false);
+  const data = await api.get<T>(path);
+  writeCache(path, data);
+  apply(data, true);
+  return data;
 }
 
 export const api = {

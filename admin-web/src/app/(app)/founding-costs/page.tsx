@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, download, formatDate, money } from "@/lib/api";
+import { api, download, formatDate, getCached, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 import Icon from "@/components/Icon";
 import {
@@ -53,28 +53,25 @@ export default function FoundingCostsPage() {
   const branches = catalog.filter((c) => c.type === "branch");
 
   async function load() {
-    const [report, list] = await Promise.all([
-      api.get<Summary>("/reports/founding-costs/"),
-      api.get<Page<Cost>>("/founding-costs/?page_size=100&ordering=-happened_on"),
+    await Promise.all([
+      getCached<Summary>("/reports/founding-costs/", (report) => setSummary(report)),
+      getCached<Page<Cost>>("/founding-costs/?page_size=100&ordering=-happened_on", (list) =>
+        setRows(list.results)
+      ),
     ]);
-    setSummary(report);
-    setRows(list.results);
   }
 
   useEffect(() => {
     load().catch((err) => setError(err.message));
-    api
-      .get<Page<Catalog>>("/catalog/?page_size=300")
-      .then((res) => setCatalog(res.results))
-      .catch(() => {});
-    api
-      .get<{ data: Account[] }>("/accounts/pickable/")
-      .then((res) => setAccounts(res.data.filter((a) => a.is_cash)))
-      .catch(() => {});
-    api
-      .get<Page<Party>>("/parties/?page_size=200")
-      .then((res) => setSuppliers(res.results.filter((p) => p.kind === "supplier" || p.kind === "other")))
-      .catch(() => {});
+    getCached<Page<Catalog>>("/catalog/?page_size=300", (res) => setCatalog(res.results)).catch(
+      () => {}
+    );
+    getCached<{ data: Account[] }>("/accounts/pickable/", (res) =>
+      setAccounts(res.data.filter((a) => a.is_cash))
+    ).catch(() => {});
+    getCached<Page<Party>>("/parties/?page_size=200", (res) =>
+      setSuppliers(res.results.filter((p) => p.kind === "supplier" || p.kind === "other"))
+    ).catch(() => {});
   }, []);
 
   return (

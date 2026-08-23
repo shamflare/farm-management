@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { api, download, formatDate, money } from "@/lib/api";
+import { api, download, formatDate, getCached, hasCache, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import Icon from "@/components/Icon";
@@ -101,12 +101,15 @@ export default function FinancePage() {
   const branches = useMemo(() => catalog.filter((c) => c.type === "branch"), [catalog]);
 
   async function loadEntries() {
-    setLoading(true);
     const params = new URLSearchParams({ page_size: "40" });
     if (kind) params.set("kind", kind);
+    const path = `/entries/?${params}`;
+    setLoading(!hasCache(path));
     try {
-      const data = await api.get<Page<Entry>>(`/entries/?${params}`);
-      setEntries(data.results);
+      await getCached<Page<Entry>>(path, (data) => {
+        setEntries(data.results);
+        setLoading(false);
+      });
     } finally {
       setLoading(false);
     }
@@ -116,19 +119,17 @@ export default function FinancePage() {
     // قد يسجّل العامل مصروفًا دون أن يُسمح له بقراءة الدفتر، فتعود القوائم
     // إلى نقاط تحمل الأسماء بلا أرصدة.
     const accountsCall = canReadBooks
-      ? api.get<Page<Account>>("/accounts/?page_size=200").then((d) => d.results)
-      : api.get<{ data: Account[] }>("/accounts/pickable/").then((d) => d.data);
+      ? getCached<Page<Account>>("/accounts/?page_size=200", (d) => setAccounts(d.results))
+      : getCached<{ data: Account[] }>("/accounts/pickable/", (d) => setAccounts(d.data));
     const partiesCall = canReadBooks
-      ? api.get<Page<Party>>("/parties/?page_size=200").then((d) => d.results)
-      : api.get<{ data: Party[] }>("/parties/pickable/").then((d) => d.data);
+      ? getCached<Page<Party>>("/parties/?page_size=200", (d) => setParties(d.results))
+      : getCached<{ data: Party[] }>("/parties/pickable/", (d) => setParties(d.data));
 
-    Promise.all([accountsCall, api.get<Page<Catalog>>("/catalog/?page_size=200"), partiesCall])
-      .then(([accountRows, c, partyRows]) => {
-        setAccounts(accountRows);
-        setCatalog(c.results);
-        setParties(partyRows);
-      })
-      .catch((err) => setError(err.message));
+    Promise.all([
+      accountsCall,
+      getCached<Page<Catalog>>("/catalog/?page_size=200", (c) => setCatalog(c.results)),
+      partiesCall,
+    ]).catch((err) => setError(err.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { api, download, formatDate, money } from "@/lib/api";
+import { api, download, formatDate, getCached, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 import Icon from "@/components/Icon";
 import {
@@ -72,12 +72,13 @@ export default function PartiesPage() {
   async function load() {
     const params = new URLSearchParams({ page_size: "100" });
     if (kind) params.set("kind", kind);
-    const data = await api.get<Page<Party>>(`/parties/?${params}`);
-    setRows(data.results);
+    await getCached<Page<Party>>(`/parties/?${params}`, (data) => setRows(data.results));
   }
 
   useEffect(() => {
-    api.get<Page<Account>>("/accounts/?page_size=200").then((d) => setAccounts(d.results)).catch(() => {});
+    getCached<Page<Account>>("/accounts/?page_size=200", (d) => setAccounts(d.results)).catch(
+      () => {}
+    );
   }, []);
 
   useEffect(() => {

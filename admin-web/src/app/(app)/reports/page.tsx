@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, download, formatNumber, money } from "@/lib/api";
+import { api, download, formatNumber, getCached, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 import Icon from "@/components/Icon";
 import {
@@ -61,8 +61,9 @@ export default function ReportsPage() {
       categories: `/reports/categories/?period=${period}&type=expense`,
       animals: "/reports/animals/",
     };
-    setData(null);
-    api.get(paths[tab]).then(setData).catch((err) => setError(err.message));
+    // التقرير الذي قُرئ قبل قليل يُرسم فورًا ثم يُصحَّح؛ إفراغه أولًا كان
+    // يعني شاشة بيضاء عند كل تنقّل بين التبويبات.
+    getCached<any>(paths[tab], (fresh) => setData(fresh)).catch((err) => setError(err.message));
   }, [tab, period]);
 
   const periodMatters = tab !== "trial" && tab !== "animals";

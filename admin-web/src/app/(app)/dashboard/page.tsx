@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { api, download, formatNumber, money } from "@/lib/api";
+import { download, formatNumber, getCached, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 import { visibleWidgets } from "@/lib/theme";
 import Icon from "@/components/Icon";
@@ -75,12 +75,12 @@ export default function DashboardPage() {
   const wanted = visibleWidgets(me?.theme);
   const show = (key: string) => wanted.includes(key);
 
+  // آخر نسخة رأيتها لهذه الفترة تُرسم فورًا، والطازجة تحلّ محلها حين تصل —
+  // فلا تُمحى الأرقام من أمام العين لتعود بعد لحظة كما هي.
   useEffect(() => {
-    setData(null);
-    api
-      .get<Dashboard>(`/reports/dashboard/?period=${period}`)
-      .then(setData)
-      .catch((err) => setError(err.message));
+    getCached<Dashboard>(`/reports/dashboard/?period=${period}`, (fresh) => setData(fresh)).catch((err) =>
+      setError(err.message)
+    );
   }, [period]);
 
   const head = (
