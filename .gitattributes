@@ -1,0 +1,9 @@
+# ملفات تعمل داخل لينكس مهما كان الجهاز الذي حُرِّرت عليه.
+# نهاية السطر الويندوزية تكسر سطر التنفيذ الأول في سكربت الحاوية، فيصير
+# "bad interpreter" عند الإقلاع — ولا شيء في رسالة الخطأ يدل على السبب.
+* text=auto
+*.sh text eol=lf
+Dockerfile* text eol=lf
+Caddyfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
