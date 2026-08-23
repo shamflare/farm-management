@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { api, download, formatDate, formatNumber } from "@/lib/api";
+import { api, download, formatDate, formatNumber, getCached, hasCache } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 import Icon from "@/components/Icon";
 import {
@@ -13,6 +13,7 @@ import {
   SearchField,
   SelectField,
   TableMessage,
+  Tabs,
   Toolbar,
 } from "@/components/ui";
 
@@ -43,19 +44,31 @@ const STATUS_TONE: Record<string, string> = {
   active: "badge-success",
 };
 
+/** الفلاتر التي يحملها كل تبويب على حدة. الفرع ليس منها: الفرع هو التبويب. */
+type Filters = { animal_type: string; status: string; sex: string; is_on_farm: string };
+
+const BLANK: { search: string; filters: Filters } = {
+  search: "",
+  filters: { animal_type: "", status: "", sex: "", is_on_farm: "true" },
+};
+
+const ALL_TAB = "all";
+
 export default function AnimalsPage() {
   const { can, me } = useApp();
   const [catalog, setCatalog] = useState<Catalog[]>([]);
   const [rows, setRows] = useState<Animal[]>([]);
   const [count, setCount] = useState(0);
-  const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState({
-    branch: "",
-    animal_type: "",
-    status: "",
-    sex: "",
-    is_on_farm: "true",
-  });
+
+  // كل تبويب يحفظ بحثه وفلاتره لوحده: تضبط التربية على «الإناث في المزرعة»،
+  // تنتقل إلى التسمين وتضبطه على «الذكور»، ثم تعود فتجد كلًّا منهما كما تركته.
+  const [tab, setTab] = useState<string>(ALL_TAB);
+  const [tabs, setTabs] = useState<Record<string, { search: string; filters: Filters }>>({});
+  const view = tabs[tab] ?? BLANK;
+  const { search, filters } = view;
+  const patch = (next: Partial<{ search: string; filters: Filters }>) =>
+    setTabs((prev) => ({ ...prev, [tab]: { ...(prev[tab] ?? BLANK), ...next } }));
+
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -68,20 +81,53 @@ export default function AnimalsPage() {
     return grouped;
   }, [catalog]);
 
+  const branches = byType["branch"] ?? [];
+  const branchId = tab === ALL_TAB ? "" : tab;
+  const branchKeys = branches.map((branch) => branch.id).join(",");
+
+  // عدد رؤوس كل فرع مكتوب على تبويبه. طلب واحد صغير لكل فرع (صفحة برأس واحد،
+  // المطلوب منها العدد فقط)، ويُحفظ كغيره فلا يُعاد إلا بعد تغيّر فعلي.
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  useEffect(() => {
+    branches.forEach((branch) => {
+      getCached<Page<Animal>>(
+        `/animals/?page_size=1&is_on_farm=true&branch=${branch.id}`,
+        (data) => setCounts((prev) => ({ ...prev, [branch.id]: data.count }))
+      ).catch(() => {});
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchKeys]);
+
+  // «مشترك» فرع للتكاليف المشتركة لا قطيع له، فلا يأخذ تبويبًا إلا إن وُجد فيه
+  // رأس فعلًا — وعندها لا بد أن يكون له مكان يُفتح منه.
+  const tabBranches = branches.filter(
+    (branch) => branch.code !== "shared" || (counts[branch.id] ?? 0) > 0
+  );
+
+  const query = useMemo(() => {
+    const params = new URLSearchParams({ page_size: "50" });
+    if (search) params.set("search", search);
+    if (branchId) params.set("branch", branchId);
+    Object.entries(filters).forEach(([key, value]) => value && params.set(key, value));
+    return `/animals/?${params}`;
+  }, [search, branchId, filters]);
+
   async function loadCatalog() {
-    const data = await api.get<Page<Catalog>>("/catalog/?page_size=200");
-    setCatalog(data.results);
+    await getCached<Page<Catalog>>("/catalog/?page_size=200", (data) =>
+      setCatalog(data.results)
+    );
   }
 
   async function loadAnimals() {
-    setLoading(true);
-    const params = new URLSearchParams({ page_size: "50" });
-    if (search) params.set("search", search);
-    Object.entries(filters).forEach(([key, value]) => value && params.set(key, value));
+    // الهيكل العظمي لا يظهر إلا حين لا يوجد ما يُعرض؛ إن كانت هناك نسخة
+    // محفوظة فهي تُرسم فورًا ثم تُستبدل بالطازجة بلا وميض.
+    setLoading(!hasCache(query));
     try {
-      const data = await api.get<Page<Animal>>(`/animals/?${params}`);
-      setRows(data.results);
-      setCount(data.count);
+      await getCached<Page<Animal>>(query, (data) => {
+        setRows(data.results);
+        setCount(data.count);
+        setLoading(false);
+      });
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -96,7 +142,10 @@ export default function AnimalsPage() {
   useEffect(() => {
     loadAnimals();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters, search]);
+  }, [query]);
+
+  const tabLabel =
+    tab === ALL_TAB ? "كل الفروع" : branches.find((item) => item.id === tab)?.display_name ?? "—";
 
   const filtered =
     search !== "" || Object.values(filters).some((value) => value && value !== "true");
@@ -105,14 +154,14 @@ export default function AnimalsPage() {
     <>
       <PageHeader
         title="الحيوانات"
-        subtitle={`${formatNumber(count)} حيوان · المباع والنافق يبقيان في السجل والنسب`}
+        subtitle={`${formatNumber(count)} حيوان في ${tabLabel} · المباع والنافق يبقيان في السجل والنسب`}
         farm={me?.farm?.name}
       >
         {can("animals.export") && (
           <ExportButton
             onClick={() =>
               download(
-                `/export/animals/?branch=${filters.branch}&is_on_farm=${filters.is_on_farm}`
+                `/export/animals/?branch=${branchId}&is_on_farm=${filters.is_on_farm}`
               ).catch((err) => setError(err.message))
             }
           />
@@ -128,11 +177,29 @@ export default function AnimalsPage() {
         )}
       </PageHeader>
 
+      {/* الفروع تبويبات لا فلترًا: فرع التربية وفرع التسمين قطيعان يُداران على
+          حدة، والانتقال بينهما حركة يومية تستحق نقرة واحدة في أعلى الشاشة. */}
+      <Tabs
+        value={tab}
+        onChange={setTab}
+        options={[
+          { key: ALL_TAB, label: "الكل", icon: "sheep" as const },
+          ...tabBranches.map((branch) => ({
+            key: branch.id,
+            label:
+              counts[branch.id] === undefined
+                ? branch.display_name
+                : `${branch.display_name} · ${formatNumber(counts[branch.id])}`,
+          })),
+        ]}
+      />
+
       <ErrorNote message={error} />
 
       {showForm && (
         <AnimalForm
           byType={byType}
+          branch={branchId}
           onDone={() => {
             setShowForm(false);
             loadAnimals();
@@ -143,25 +210,13 @@ export default function AnimalsPage() {
       <Toolbar>
         <SearchField
           value={search}
-          onChange={setSearch}
+          onChange={(value) => patch({ search: value })}
           placeholder="رقم الحيوان، الاسم، رقم الشريحة…"
         />
         <SelectField
-          label="الفرع"
-          value={filters.branch}
-          onChange={(value) => setFilters({ ...filters, branch: value })}
-        >
-          <option value="">كل الفروع</option>
-          {(byType["branch"] ?? []).map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.display_name}
-            </option>
-          ))}
-        </SelectField>
-        <SelectField
           label="النوع"
           value={filters.animal_type}
-          onChange={(value) => setFilters({ ...filters, animal_type: value })}
+          onChange={(value) => patch({ filters: { ...filters, animal_type: value } })}
         >
           <option value="">الكل</option>
           {(byType["animal_type"] ?? []).map((item) => (
@@ -173,7 +228,7 @@ export default function AnimalsPage() {
         <SelectField
           label="الحالة"
           value={filters.status}
-          onChange={(value) => setFilters({ ...filters, status: value })}
+          onChange={(value) => patch({ filters: { ...filters, status: value } })}
         >
           <option value="">الكل</option>
           {(byType["animal_status"] ?? []).map((item) => (
@@ -185,7 +240,7 @@ export default function AnimalsPage() {
         <SelectField
           label="الجنس"
           value={filters.sex}
-          onChange={(value) => setFilters({ ...filters, sex: value })}
+          onChange={(value) => patch({ filters: { ...filters, sex: value } })}
         >
           <option value="">الكل</option>
           <option value="female">أنثى</option>
@@ -194,7 +249,7 @@ export default function AnimalsPage() {
         <SelectField
           label="الوجود"
           value={filters.is_on_farm}
-          onChange={(value) => setFilters({ ...filters, is_on_farm: value })}
+          onChange={(value) => patch({ filters: { ...filters, is_on_farm: value } })}
         >
           <option value="true">في المزرعة</option>
           <option value="false">خارج المزرعة</option>
@@ -270,9 +325,12 @@ export default function AnimalsPage() {
 
 function AnimalForm({
   byType,
+  branch,
   onDone,
 }: {
   byType: Record<string, Catalog[]>;
+  /** الفرع المفتوح تبويبه — الحيوان الجديد ينضم إليه ما لم يُغيَّر يدويًا. */
+  branch: string;
   onDone: () => void;
 }) {
   const [form, setForm] = useState({
@@ -296,11 +354,12 @@ function AnimalForm({
     const branches = byType["branch"] ?? [];
     setForm((prev) => ({
       ...prev,
-      branch: prev.branch || branches.find((b) => b.code === "breeding")?.id || "",
+      branch:
+        prev.branch || branch || branches.find((b) => b.code === "breeding")?.id || "",
       animal_type: prev.animal_type || types[0]?.id || "",
       status: prev.status || statuses.find((s) => s.code === "active")?.id || statuses[0]?.id || "",
     }));
-  }, [byType]);
+  }, [byType, branch]);
 
   // كل فرع يعدّ من واحد، فالاقتراح يحتاج أن يعرف الفرع الذي ينضم إليه
   // الحيوان. تغيير الفرع يستبدل الرقم المقترح، ولا يمسّ رقمًا كتبه المستخدم.

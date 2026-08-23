@@ -33,6 +33,28 @@ class PartyAdminTests(TestCase):
         self.assertEqual(party.name, "معمل الشام")
         self.assertEqual(party.payable_account_id, account_id)
 
+    def test_the_same_name_twice_is_refused_with_a_readable_message(self):
+        """التكرار كان يرتد خطأ خادم غامضًا؛ القاعدة ترفض، والرسالة تشرح."""
+        create_party(self.farm, kind=PartyKind.SUPPLIER, name="معمل الأعلاف")
+
+        response = self.client.post(
+            "/api/v1/parties/", {"kind": "supplier", "name": "معمل الأعلاف"}, format="json"
+        )
+
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertIn("name", response.json())
+        self.assertEqual(Party.objects.filter(farm=self.farm, name="معمل الأعلاف").count(), 1)
+
+    def test_the_same_name_under_a_different_kind_is_allowed(self):
+        """المورد والزبون قد يكونان الشخص نفسه بسجلّين مختلفين."""
+        create_party(self.farm, kind=PartyKind.SUPPLIER, name="أبو علي")
+
+        response = self.client.post(
+            "/api/v1/parties/", {"kind": "customer", "name": "أبو علي"}, format="json"
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+
     def test_changing_a_partner_share_is_recorded_in_history(self):
         partner = create_party(self.farm, kind=PartyKind.PARTNER, name="أبو محمد")
         set_ownership(partner, 60, effective_from=TODAY)

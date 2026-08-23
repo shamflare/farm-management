@@ -79,6 +79,24 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = ["id"]
 
 
+class ProfileSerializer(serializers.ModelSerializer):
+    """ما يملك الشخص تغييره في نفسه: الاسم الذي تناديه به كل الشاشات.
+
+    اسم المستخدم للدخول لا يتغيّر من هنا — تغييره يقطع الصلة بين الشخص وبين ما
+    سجّله في سجل التدقيق، والاسم الظاهر يكفي لتصحيح ما هو مكتوب على الشاشة.
+    """
+
+    class Meta:
+        model = User
+        fields = ["full_name", "phone", "email", "language"]
+
+    def validate_full_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("الاسم لا يكون فارغًا")
+        return value
+
+
 class MembershipSerializer(serializers.ModelSerializer):
     """A person's access to one farm, with the party record they are paid as."""
 
@@ -88,11 +106,30 @@ class MembershipSerializer(serializers.ModelSerializer):
         source="role", queryset=Role.objects.all(), write_only=True, required=False
     )
     party = serializers.SerializerMethodField()
+    # اسم الشخص يُصحَّح من نفس الشاشة التي يُدار فيها حسابه، لا من شاشة أخرى.
+    full_name = serializers.CharField(write_only=True, required=False, max_length=160)
+    phone = serializers.CharField(
+        write_only=True, required=False, allow_blank=True, max_length=32
+    )
 
     class Meta:
         model = Membership
-        fields = ["id", "user", "role", "role_id", "is_active", "party"]
+        fields = ["id", "user", "role", "role_id", "is_active", "party", "full_name", "phone"]
         read_only_fields = ["id", "user"]
+
+    def update(self, instance, validated_data):
+        full_name = validated_data.pop("full_name", None)
+        phone = validated_data.pop("phone", None)
+        changed = []
+        if full_name is not None and full_name.strip():
+            instance.user.full_name = full_name.strip()
+            changed.append("full_name")
+        if phone is not None:
+            instance.user.phone = phone
+            changed.append("phone")
+        if changed:
+            instance.user.save(update_fields=changed)
+        return super().update(instance, validated_data)
 
     def get_party(self, obj):
         party = obj.user.parties.filter(farm=obj.farm).first()
@@ -236,6 +273,29 @@ class PartySerializer(serializers.ModelSerializer):
             "id", "receivable_account", "payable_account", "capital_account",
             "drawings_account", "cash_account",
         ]
+
+    def validate(self, attrs):
+        """اسم واحد لكل نوع داخل المزرعة.
+
+        القاعدة نفسها تمنع التكرار، لكنها كانت تمنعه بخطأ خادم غامض. الفحص هنا
+        يردّه رسالة مفهومة على الحقل نفسه، فيعرف من يكتب أن السجل موجود أصلًا.
+        """
+        from apps.api.permissions import resolve_farm
+
+        request = self.context.get("request")
+        name = (attrs.get("name") or getattr(self.instance, "name", "") or "").strip()
+        kind = attrs.get("kind") or getattr(self.instance, "kind", "")
+        if request is None or not name or not kind:
+            return attrs
+
+        clash = Party.objects.filter(farm=resolve_farm(request), kind=kind, name=name)
+        if self.instance is not None:
+            clash = clash.exclude(pk=self.instance.pk)
+        if clash.exists():
+            raise serializers.ValidationError(
+                {"name": "يوجد سجل بهذا الاسم في نفس النوع — اختر اسمًا يميّزه"}
+            )
+        return attrs
 
     def get_summary(self, obj):
         if self.context.get("with_summary") is False:

@@ -24,6 +24,7 @@ from apps.api.serializers import (
     MembershipSerializer,
     PasswordResetSerializer,
     PermissionSerializer,
+    ProfileSerializer,
     RoleSerializer,
     ThemeSerializer,
     UserSerializer,
@@ -35,6 +36,7 @@ from apps.core.models import Farm
 from apps.customfields.models import FieldDefinition
 from apps.parties.models import Party
 from apps.theme import services as theme_services
+from apps.theme.models import FONT_CATALOG
 
 
 class FarmTokenSerializer(TokenObtainPairSerializer):
@@ -114,6 +116,27 @@ class MeView(APIView):
                 "theme": theme_services.published_payload(farm),
             }
         )
+
+    def patch(self, request):
+        """أصلِح اسمك كما يُكتب على الشاشة.
+
+        الاسم في أسفل القائمة الجانبية هو اسم صاحب الحساب لا اسم الدور، فمن
+        يملك الحساب هو من يصحّحه — بلا صلاحية إضافية وبلا مرور على المالك.
+        """
+        serializer = ProfileSerializer(request.user, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        before = snapshot(request.user, ["full_name", "phone", "email"])
+        serializer.save()
+        record(
+            AuditAction.UPDATE,
+            "user",
+            request.user.id,
+            farm=resolve_farm(request),
+            label=f"تعديل بيانات الحساب {request.user.username}",
+            old=before,
+            new=snapshot(request.user, ["full_name", "phone", "email"]),
+        )
+        return self.get(request)
 
 
 class SwitchFarmView(APIView):
@@ -479,6 +502,15 @@ class ThemeDraftView(APIView):
     permission_classes = [FarmPermission]
     required_permissions = {"default": "theme.edit"}
 
+    # قائمة الخطوط تُرسل مع المسودة لا تُكتب في الواجهة: الخادم هو من يرفض خطًا
+    # غير مسموح، فالقائمة التي تُعرض للاختيار يجب أن تكون قائمته هو.
+    @staticmethod
+    def _fonts():
+        return [
+            {"family": family, "label": label, "note": note, "kind": kind}
+            for family, label, note, kind in FONT_CATALOG
+        ]
+
     def get(self, request):
         farm = resolve_farm(request)
         draft = theme_services.get_draft(farm)
@@ -486,6 +518,7 @@ class ThemeDraftView(APIView):
             {
                 "draft": ThemeSerializer(draft).data,
                 "problems": theme_services.validate_theme(draft),
+                "fonts": self._fonts(),
             }
         )
 
@@ -496,7 +529,11 @@ class ThemeDraftView(APIView):
         except DjangoValidationError as exc:
             raise ValidationError(getattr(exc, "message_dict", {"detail": exc.messages}))
         return Response(
-            {"draft": ThemeSerializer(draft).data, "problems": problems},
+            {
+                "draft": ThemeSerializer(draft).data,
+                "problems": problems,
+                "fonts": self._fonts(),
+            },
             status=status.HTTP_200_OK,
         )
 

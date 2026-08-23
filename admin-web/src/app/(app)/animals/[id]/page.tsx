@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { api, formatDate, formatNumber, money } from "@/lib/api";
+import { api, formatDate, formatNumber, getCached, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 import Attachments from "@/components/Attachments";
 import Icon, { IconName } from "@/components/Icon";
@@ -154,38 +154,32 @@ export default function AnimalDetailPage() {
 
   async function load() {
     const id = params.id;
-    const [a, t, c, f, p, h, w] = await Promise.all([
-      api.get<Animal>(`/animals/${id}/`),
-      api.get<{ data: { events: Event[] } }>(`/animals/${id}/timeline/`),
-      api.get<{ data: Cost }>(`/animals/${id}/cost/`),
-      api.get<{ data: Tree }>(`/animals/${id}/family-tree/`),
-      api.get<{ data: any }>(`/animals/${id}/productivity/`),
-      api.get<Page<Health>>(`/health/?animal=${id}&page_size=50`),
-      api.get<Page<Weight>>(`/weights/?animal=${id}&page_size=50`),
+    // كل جزء من الملف يُرسم حين يصل، ومن المحفوظ قبل ذلك: البطاقة لا تنتظر
+    // شجرة النسب، وشجرة النسب لا تنتظر سجل الأوزان.
+    await Promise.all([
+      getCached<Animal>(`/animals/${id}/`, (a) => setAnimal(a)),
+      getCached<{ data: { events: Event[] } }>(`/animals/${id}/timeline/`, (t) =>
+        setEvents(t.data.events)
+      ),
+      getCached<{ data: Cost }>(`/animals/${id}/cost/`, (c) => setCost(c.data)),
+      getCached<{ data: Tree }>(`/animals/${id}/family-tree/`, (f) => setTree(f.data)),
+      getCached<{ data: any }>(`/animals/${id}/productivity/`, (pr) => setProductivity(pr.data)),
+      getCached<Page<Health>>(`/health/?animal=${id}&page_size=50`, (h) => setHealth(h.results)),
+      getCached<Page<Weight>>(`/weights/?animal=${id}&page_size=50`, (w) => setWeights(w.results)),
     ]);
-    setAnimal(a);
-    setEvents(t.data.events);
-    setCost(c.data);
-    setTree(f.data);
-    setProductivity(p.data);
-    setHealth(h.results);
-    setWeights(w.results);
   }
 
   useEffect(() => {
     load().catch((err) => setError(err.message));
-    api
-      .get<Page<Catalog>>("/catalog/?page_size=300")
-      .then((res) => setCatalog(res.results))
-      .catch(() => {});
-    api
-      .get<{ data: Account[] }>("/accounts/pickable/")
-      .then((res) => setAccounts(res.data.filter((a) => a.is_cash)))
-      .catch(() => {});
-    api
-      .get<Page<Party>>("/parties/?page_size=200")
-      .then((res) => setParties(res.results))
-      .catch(() => {});
+    getCached<Page<Catalog>>("/catalog/?page_size=300", (res) => setCatalog(res.results)).catch(
+      () => {}
+    );
+    getCached<{ data: Account[] }>("/accounts/pickable/", (res) =>
+      setAccounts(res.data.filter((a) => a.is_cash))
+    ).catch(() => {});
+    getCached<Page<Party>>("/parties/?page_size=200", (res) => setParties(res.results)).catch(
+      () => {}
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
 
@@ -938,10 +932,10 @@ function BirthForm({
   const { busy, error, run } = useSubmit(onDone);
 
   useEffect(() => {
-    api
-      .get<Page<{ id: string; tag: string; name: string }>>("/animals/?sex=male&is_on_farm=true&page_size=100")
-      .then((res) => setMales(res.results))
-      .catch(() => {});
+    getCached<Page<{ id: string; tag: string; name: string }>>(
+      "/animals/?sex=male&is_on_farm=true&page_size=100",
+      (res) => setMales(res.results)
+    ).catch(() => {});
   }, []);
 
   return (

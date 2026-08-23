@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, getCached } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 import Icon from "@/components/Icon";
 import {
@@ -41,14 +41,11 @@ export default function UsersPage() {
   const [notice, setNotice] = useState("");
 
   async function load() {
-    const [memberRows, roleRows, partyRows] = await Promise.all([
-      api.get<Page<Member>>("/members/?page_size=100"),
-      api.get<Page<Role>>("/roles/?page_size=50"),
-      api.get<Page<Party>>("/parties/?page_size=200"),
+    await Promise.all([
+      getCached<Page<Member>>("/members/?page_size=100", (rows) => setMembers(rows.results)),
+      getCached<Page<Role>>("/roles/?page_size=50", (rows) => setRoles(rows.results)),
+      getCached<Page<Party>>("/parties/?page_size=200", (rows) => setParties(rows.results)),
     ]);
-    setMembers(memberRows.results);
-    setRoles(roleRows.results);
-    setParties(partyRows.results);
   }
 
   useEffect(() => {
@@ -92,6 +89,19 @@ export default function UsersPage() {
     }
   }
 
+  async function renameMember(member: Member, full_name: string) {
+    if (!full_name.trim() || full_name === member.user.full_name) return;
+    try {
+      await api.patch(`/members/${member.id}/`, { full_name });
+      setNotice(`صار اسم «${member.user.username}» يُكتب: ${full_name}`);
+      // اسمي أنا يظهر في القائمة الجانبية، فيلزم إعادة قراءة الجلسة لا الجدول.
+      if (member.user.id === me?.user.id) window.location.reload();
+      else load();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  }
+
   async function toggleActive(member: Member) {
     try {
       await api.patch(`/members/${member.id}/`, { is_active: !member.is_active });
@@ -125,6 +135,8 @@ export default function UsersPage() {
 
       <ErrorNote message={error} />
       <SuccessNote message={notice} />
+
+      <MyProfileCard onSaved={setNotice} onError={setError} />
 
       {showForm && (
         <MemberForm
@@ -163,10 +175,20 @@ export default function UsersPage() {
               return (
                 <tr key={member.id} style={member.is_active ? undefined : { opacity: 0.55 }}>
                   <td className="strong">
-                    <span className="inline" style={{ gap: "var(--s2)" }}>
-                      {member.user.full_name || member.user.username}
-                      {isMe && <span className="badge">أنت</span>}
-                    </span>
+                    {can("users.edit") ? (
+                      <span className="inline" style={{ gap: "var(--s2)" }}>
+                        <NameCell
+                          value={member.user.full_name || member.user.username}
+                          onSave={(name) => renameMember(member, name)}
+                        />
+                        {isMe && <span className="badge">أنت</span>}
+                      </span>
+                    ) : (
+                      <span className="inline" style={{ gap: "var(--s2)" }}>
+                        {member.user.full_name || member.user.username}
+                        {isMe && <span className="badge">أنت</span>}
+                      </span>
+                    )}
                   </td>
                   <td className="muted num">{member.user.username}</td>
                   <td>
@@ -359,5 +381,143 @@ function MemberForm({
         الدخول باسم المستخدم وكلمة المرور — البريد الإلكتروني اختياري وغير مستخدم للدخول.
       </span>
     </form>
+  );
+}
+
+/**
+ * الاسم الذي تناديك به كل الشاشات.
+ *
+ * كان اسم صاحب المزرعة يُكتب مرة واحدة عند إنشاء الحساب ثم يتحجّر: يظهر أسفل
+ * القائمة الجانبية وفي كل سطر بسجل التدقيق ولا سبيل إلى تصحيحه. هذه البطاقة
+ * تجعله بيد صاحبه — واسم الدخول يبقى كما هو، لأن تغييره يقطع الصلة بينه وبين
+ * ما سجّله.
+ */
+function MyProfileCard({
+  onSaved,
+  onError,
+}: {
+  onSaved: (message: string) => void;
+  onError: (message: string) => void;
+}) {
+  const { me } = useApp();
+  const [form, setForm] = useState({ full_name: "", phone: "" });
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (me) setForm({ full_name: me.user.full_name ?? "", phone: me.user.phone ?? "" });
+  }, [me]);
+
+  if (!me) return null;
+
+  const dirty =
+    form.full_name.trim() !== (me.user.full_name ?? "") ||
+    form.phone !== (me.user.phone ?? "");
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!form.full_name.trim()) return onError("الاسم لا يكون فارغًا");
+    setBusy(true);
+    try {
+      await api.patch("/auth/me/", { full_name: form.full_name.trim(), phone: form.phone });
+      onSaved("حُفظ الاسم — تُحدَّث الشاشة الآن ليظهر في كل مكان");
+      // الاسم مرسوم في القائمة الجانبية وفي أعلى الشاشة معًا؛ إعادة التحميل
+      // أصدق من تحديث نسخة منه هنا وترك البقية على القديم.
+      setTimeout(() => window.location.reload(), 600);
+    } catch (err: any) {
+      onError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="card mb-4" onSubmit={submit}>
+      <div className="card-title">
+        <span className="inline">
+          <Icon name="user" size={17} className="muted" />
+          حسابي
+        </span>
+      </div>
+      <div className="row">
+        <div className="field">
+          <label>الاسم كما يظهر في اللوحة</label>
+          <input
+            value={form.full_name}
+            onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+            placeholder="مثال: أبو محمد"
+            required
+          />
+        </div>
+        <div className="field">
+          <label>الهاتف</label>
+          <input
+            value={form.phone}
+            onChange={(e) => setForm({ ...form, phone: e.target.value })}
+            placeholder="اختياري"
+          />
+        </div>
+        <div className="field">
+          <label>اسم الدخول</label>
+          <input value={me.user.username} disabled />
+        </div>
+        <div className="field">
+          <label>الدور</label>
+          <input value={me.role?.display_name ?? "—"} disabled />
+        </div>
+      </div>
+      <div className="form-actions">
+        <Button icon="check" busy={busy} disabled={!dirty}>
+          {busy ? "جارٍ الحفظ…" : "حفظ الاسم"}
+        </Button>
+      </div>
+      <span className="stat-hint" style={{ marginInlineStart: 12 }}>
+        هذا الاسم هو ما يظهر أسفل القائمة الجانبية وفي سجل التدقيق. اسم الدخول لا يتغيّر.
+      </span>
+    </form>
+  );
+}
+
+/** خلية اسم تتحوّل إلى حقل عند النقر، وتحفظ عند الخروج منها أو بزر Enter. */
+function NameCell({ value, onSave }: { value: string; onSave: (name: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => setDraft(value), [value]);
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        className="link"
+        style={{ font: "inherit", background: "none", border: 0, cursor: "text", padding: 0 }}
+        title="اضغط لتعديل الاسم"
+        onClick={() => setEditing(true)}
+      >
+        {value}
+      </button>
+    );
+  }
+
+  const commit = () => {
+    setEditing(false);
+    onSave(draft.trim());
+  };
+
+  return (
+    <input
+      autoFocus
+      className="input"
+      style={{ minWidth: 150 }}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") commit();
+        if (e.key === "Escape") {
+          setDraft(value);
+          setEditing(false);
+        }
+      }}
+    />
   );
 }

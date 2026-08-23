@@ -15,6 +15,7 @@ from apps.assets.services import record_founding_cost
 from apps.assets.services import summary as founding_summary
 from apps.catalog.models import BranchCode, CatalogItem, CatalogTypeCode
 from apps.core.models import Farm
+from apps.core.purge import purge_farm
 from apps.core.seed import bootstrap_farm
 from apps.inventory import services as stock
 from apps.inventory.models import InventoryItem, InventoryStore
@@ -400,76 +401,9 @@ class Command(BaseCommand):
         self._report(farm)
 
     def _purge_farm(self, slug):
-        """Erase the demo farm for real, so the slug is free to be reused.
-
-        A soft delete would leave the slug taken and the next bootstrap would
-        collide with it. A hard delete trips over the PROTECT keys that guard
-        financial history - which is exactly what they are for. So the rows go
-        in whatever order the database will accept: keep sweeping the
-        farm-scoped tables until a full pass removes nothing more.
-        """
-        from django.apps import apps as django_apps
-        from django.db import models
-        from django.db.models.deletion import ProtectedError
-
-        farm = Farm.all_objects.filter(slug=slug).first()
-        if farm is None:
-            return
-
-        scoped = [
-            model
-            for model in django_apps.get_models()
-            if model is not Farm
-            and any(
-                field.name == "farm" and field.many_to_one and field.related_model is Farm
-                for field in model._meta.get_fields()
-            )
-        ]
-
-        # Break the loops first: a reversal points at the entry it reversed, a
-        # catalog row at its parent, a document at its journal entry. Every one
-        # of those is optional, so clearing them costs nothing and leaves the
-        # tables free to be emptied in any order.
-        for model in scoped:
-            optional = [
-                field.name
-                for field in model._meta.get_fields()
-                if (field.many_to_one or field.one_to_one)
-                and field.concrete
-                and field.null
-                and getattr(field.remote_field, "on_delete", None) is models.PROTECT
-            ]
-            if optional:
-                manager = getattr(model, "all_objects", model._default_manager)
-                manager.filter(farm=farm).update(**{name: None for name in optional})
-
-        remaining = list(scoped)
-        while remaining:
-            blocked = []
-            removed = 0
-            for model in remaining:
-                manager = getattr(model, "all_objects", model._default_manager)
-                rows = manager.filter(farm=farm)
-                try:
-                    count = rows.count()
-                    if count == 0:
-                        continue
-                    if hasattr(rows, "hard_delete"):
-                        rows.hard_delete()
-                    else:
-                        rows.delete()
-                    removed += count
-                except ProtectedError:
-                    blocked.append(model)
-            if not blocked:
-                break
-            if removed == 0:
-                names = ", ".join(model.__name__ for model in blocked)
-                raise RuntimeError(f"cannot clear the demo farm; blocked by {names}")
-            remaining = blocked
-
-        Farm.all_objects.filter(id=farm.id).hard_delete()
-        self.stdout.write(self.style.WARNING(f"removed existing farm '{slug}'"))
+        """Erase the demo farm for real, so the slug is free to be reused."""
+        if purge_farm(slug):
+            self.stdout.write(self.style.WARNING(f"removed existing farm '{slug}'"))
 
     def _user(self, username, full_name, farm, role_code):
         user, created = User.objects.get_or_create(
