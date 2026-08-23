@@ -1,5 +1,7 @@
 "use client";
 
+import { ensureFontLoaded, fontStack } from "@/lib/fonts";
+
 /** The theme contract served by GET /theme/ - identical for web and mobile. */
 export type ThemeTokens = {
   version: number;
@@ -64,10 +66,10 @@ export function applyTheme(tokens: ThemeTokens) {
   });
   root.style.setProperty("--radius", `${tokens.shape?.radius ?? 12}px`);
   root.style.setProperty("--font-scale", String(tokens.typography?.scale ?? 1));
-  root.style.setProperty(
-    "--font-family",
-    `"${tokens.typography?.font_family ?? "Cairo"}", "Segoe UI", system-ui, sans-serif`
-  );
+  // الخط يُجلب أولًا ثم يُطلب رسمه: كتابة الاسم وحدها لا تحمّل شيئًا.
+  const family = tokens.typography?.font_family ?? "Cairo";
+  ensureFontLoaded(family);
+  root.style.setProperty("--font-family", fontStack(family));
   root.style.setProperty("--space-unit", tokens.density === "compact" ? "0.7" : "1");
   if (tokens.brand?.name) document.title = `${tokens.brand.name} · إدارة المزرعة`;
 }
@@ -88,6 +90,10 @@ export const FALLBACK_TOKENS: ThemeTokens = {
     text: "#0F172A",
     text_muted: "#475569",
     border: "#E2E8F0",
+    sidebar: "#FFFFFF",
+    sidebar_text: "#0F172A",
+    header: "#FFFFFF",
+    header_text: "#0F172A",
   },
   typography: { font_family: "Cairo", scale: 1 },
   shape: { radius: 12 },

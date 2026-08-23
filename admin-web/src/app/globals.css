@@ -207,7 +207,17 @@ svg {
 /* --- 4. الشريط الجانبي ------------------------------------------------- */
 
 .sidebar {
-  background: var(--color-surface);
+  /* الشريط الجانبي يُلوَّن على حدة عن البطاقات. وكل ما بداخله — عناوين
+     المجموعات، الروابط، اسم الشخص — يشتقّ درجاته من لون نصّه هو، لا من نص
+     الصفحة: هكذا يعمل الشريط الداكن والفاتح بالقواعد نفسها. */
+  --sidebar-muted: color-mix(in srgb, var(--color-sidebar-text) 62%, transparent);
+  --sidebar-hover: color-mix(in srgb, var(--color-sidebar-text) 8%, transparent);
+  --sidebar-line: color-mix(in srgb, var(--color-sidebar-text) 12%, transparent);
+  /* لون العنصر النشط: مزيج بين لون الهوية ولون نص الشريط، فيبقى ظاهرًا على
+     شريط أبيض وعلى شريط أسود معًا بدل أن يذوب في أحدهما. */
+  --sidebar-active: color-mix(in srgb, var(--color-primary) 55%, var(--color-sidebar-text));
+  background: var(--color-sidebar);
+  color: var(--color-sidebar-text);
   border-inline-start: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
@@ -223,7 +233,7 @@ svg {
   gap: var(--s3);
   padding: var(--s4);
   min-height: var(--topbar-h);
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--sidebar-line);
 }
 
 .brand-mark {
@@ -262,7 +272,7 @@ svg {
 
 .brand-sub {
   font-size: 0.74rem;
-  color: var(--color-text-muted);
+  color: var(--sidebar-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -291,7 +301,7 @@ svg {
 .nav-group-label {
   font-size: 0.7rem;
   font-weight: 700;
-  color: var(--color-text-muted);
+  color: var(--sidebar-muted);
   letter-spacing: 0.04em;
   padding: var(--s2) var(--s3) var(--s1);
   opacity: 0.75;
@@ -304,7 +314,7 @@ svg {
   gap: var(--s3);
   padding: calc(9px * var(--space-unit)) var(--s3);
   border-radius: var(--radius-sm);
-  color: var(--color-text-muted);
+  color: var(--sidebar-muted);
   font-weight: 500;
   font-size: 0.92rem;
   border: none;
@@ -331,13 +341,13 @@ svg {
 }
 
 .nav-link:hover {
-  background: var(--surface-hover);
-  color: var(--color-text);
+  background: var(--sidebar-hover);
+  color: var(--color-sidebar-text);
 }
 
 .nav-link.active {
-  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-  color: var(--color-primary);
+  background: color-mix(in srgb, var(--sidebar-active) 12%, transparent);
+  color: var(--sidebar-active);
   font-weight: 700;
 }
 
@@ -349,12 +359,12 @@ svg {
   bottom: 22%;
   width: 3px;
   border-radius: var(--radius-pill);
-  background: var(--color-primary);
+  background: var(--sidebar-active);
 }
 
 .sidebar-footer {
   padding: var(--s3) var(--s4) var(--s4);
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--sidebar-line);
   display: flex;
   align-items: center;
   gap: var(--s3);
@@ -371,7 +381,11 @@ svg {
   gap: var(--s3);
   min-height: var(--topbar-h);
   padding: 0 var(--s6);
-  background: color-mix(in srgb, var(--color-surface) 86%, transparent);
+  /* شفافية خفيفة فوق لون الشريط ليبقى أثر الضبابية تحته */
+  --header-muted: color-mix(in srgb, var(--color-header-text) 65%, transparent);
+  --header-hover: color-mix(in srgb, var(--color-header-text) 10%, transparent);
+  background: color-mix(in srgb, var(--color-header) 86%, transparent);
+  color: var(--color-header-text);
   backdrop-filter: saturate(1.6) blur(10px);
   -webkit-backdrop-filter: saturate(1.6) blur(10px);
   border-bottom: 1px solid var(--color-border);
@@ -413,6 +427,39 @@ svg {
 
 .icon-btn:hover {
   background: var(--surface-hover);
+  color: var(--color-text);
+}
+
+/* أزرار الشريطين تأخذ لون نصّهما لا لون نص الصفحة، وإلا اختفت على خلفية داكنة */
+.topbar > .icon-btn,
+.topbar-tools .icon-btn,
+.topbar-tools .btn-ghost {
+  color: var(--header-muted);
+}
+
+.topbar > .icon-btn:hover,
+.topbar-tools .icon-btn:hover,
+.topbar-tools .btn-ghost:hover {
+  background: var(--header-hover);
+  color: var(--color-header-text);
+}
+
+.topbar-tools .icon-btn.bordered {
+  border-color: color-mix(in srgb, var(--color-header-text) 18%, transparent);
+}
+
+.sidebar .icon-btn {
+  color: var(--sidebar-muted);
+}
+
+.sidebar .icon-btn:hover {
+  background: var(--sidebar-hover);
+  color: var(--color-sidebar-text);
+}
+
+/* القوائم المنسدلة تعيش فوق سطح أبيض دائمًا، فتعود إلى ألوان الصفحة */
+.topbar .menu,
+.sidebar .menu {
   color: var(--color-text);
 }
 
@@ -1649,10 +1696,123 @@ select.input {
   gap: var(--s3);
 }
 
+/* معاينة الإطار: قائمة جانبية مصغّرة وشريط علوي فوق المحتوى */
+.preview-chrome {
+  display: flex;
+  min-height: 210px;
+}
+
+.preview-side {
+  width: 150px;
+  flex-shrink: 0;
+  padding: var(--s3);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.8rem;
+}
+
+.preview-side-brand {
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: var(--s2) var(--s2) var(--s3);
+}
+
+.preview-side-link {
+  padding: 7px var(--s2);
+  border-radius: var(--radius-sm);
+}
+
+.preview-top {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: 0 var(--s4);
+  min-height: 46px;
+  font-size: 0.88rem;
+}
+
+@media (max-width: 560px) {
+  .preview-side {
+    width: 112px;
+  }
+}
+
 .swatch-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: var(--s2);
+}
+
+/* معرض الخطوط: كل بطاقة مكتوبة بخطّها، فالاختيار يتم بالعين لا بقراءة اسم */
+.font-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: var(--s3);
+}
+
+.font-card {
+  display: grid;
+  gap: var(--s2);
+  padding: var(--s4);
+  text-align: start;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease),
+    transform 0.15s var(--ease);
+}
+
+.font-card:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.font-card:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+/* المختار يُعرف من حافته ومن علامته معًا — لا من اللون وحده */
+.font-card.active {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary) inset;
+  background: color-mix(in srgb, var(--color-primary) 5%, var(--color-surface));
+}
+
+.font-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.font-card-name {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--color-text);
+}
+
+.font-card-tick {
+  margin-inline-start: auto;
+  color: var(--color-primary);
+}
+
+/* سطر المعاينة: أكبر قليلًا من نص الواجهة ليُظهر شخصية الخط */
+.font-card-sample {
+  font-size: 1.15rem;
+  line-height: 1.9;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.font-card-note {
+  font-size: 0.76rem;
+  color: var(--color-text-muted);
+  line-height: 1.6;
 }
 
 /* --- 20. الاستجابة ----------------------------------------------------- */

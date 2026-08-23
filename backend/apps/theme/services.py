@@ -24,12 +24,36 @@ from apps.theme.models import (
 
 HEX_PATTERN = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 
+# أسماء الألوان كما تُعرض على الشاشة، لتقول الرسالة أي حقلين لا يتباينان.
+COLOR_NAMES_AR = {
+    "primary": "اللون الأساسي",
+    "primary_contrast": "النص فوق الأساسي",
+    "accent": "اللون المميز",
+    "success": "النجاح",
+    "warning": "التحذير",
+    "danger": "الخطر",
+    "info": "المعلومات",
+    "background": "الخلفية",
+    "surface": "البطاقات",
+    "text": "النص",
+    "text_muted": "النص الثانوي",
+    "border": "الحدود",
+    "sidebar": "خلفية القائمة الجانبية",
+    "sidebar_text": "خط القائمة الجانبية",
+    "header": "خلفية الشريط العلوي",
+    "header_text": "خط الشريط العلوي",
+}
+
 # Pairs that must stay readable: (foreground, background, minimum ratio).
 CONTRAST_RULES = [
     ("text", "background", 4.5),
     ("text", "surface", 4.5),
     ("primary_contrast", "primary", 4.5),
     ("text_muted", "surface", 3.0),
+    # لون خط القائمة على لون القائمة، ولون خط الشريط على لون الشريط: أسماء
+    # الأقسام تُقرأ في كل ثانية، وخطأ هنا يعمي نصف الشاشة.
+    ("sidebar_text", "sidebar", 4.5),
+    ("header_text", "header", 4.5),
 ]
 
 
@@ -65,19 +89,29 @@ def validate_theme(theme, *, strict=True):
 
     for key, value in colors.items():
         if not isinstance(value, str) or not HEX_PATTERN.match(value):
-            problems.append({"field": f"colors.{key}", "message": "must be a hex color like #1A2B3C"})
+            problems.append(
+                {"field": f"colors.{key}", "message": "لون غير صالح — اكتبه بصيغة #1A2B3C"}
+            )
 
     if problems:
         return problems
 
     if theme.font_family not in ALLOWED_FONTS:
+        # الرسالة تُقرأ على الشاشة، والشاشة عربية.
         problems.append(
-            {"field": "font_family", "message": f"font must be one of: {', '.join(ALLOWED_FONTS)}"}
+            {
+                "field": "font_family",
+                "message": "اختر خطًا من القائمة المعروضة — هذا الخط لا يُحمَّل في المتصفح",
+            }
         )
     if not 0.8 <= float(theme.font_scale) <= 1.6:
-        problems.append({"field": "font_scale", "message": "font scale must be between 0.8 and 1.6"})
+        problems.append(
+            {"field": "font_scale", "message": "حجم الخط يكون بين 0.8 و 1.6"}
+        )
     if not 0 <= theme.corner_radius <= 32:
-        problems.append({"field": "corner_radius", "message": "corner radius must be between 0 and 32"})
+        problems.append(
+            {"field": "corner_radius", "message": "استدارة الحواف تكون بين 0 و 32"}
+        )
 
     if strict:
         for foreground, background, minimum in CONTRAST_RULES:
@@ -87,8 +121,9 @@ def validate_theme(theme, *, strict=True):
                     {
                         "field": f"colors.{foreground}",
                         "message": (
-                            f"contrast with {background} is {ratio:.2f}:1, "
-                            f"below the {minimum}:1 minimum for readable text"
+                            f"«{COLOR_NAMES_AR.get(foreground, foreground)}» على "
+                            f"«{COLOR_NAMES_AR.get(background, background)}»: التباين "
+                            f"{ratio:.2f}:1 وهو دون الحد {minimum}:1 — النص لن يُقرأ"
                         ),
                     }
                 )

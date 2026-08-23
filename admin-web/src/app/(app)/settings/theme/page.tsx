@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { applyTheme, DASHBOARD_WIDGETS } from "@/lib/theme";
+import { fontStack, preloadFonts } from "@/lib/fonts";
 import { useApp } from "@/components/AppShell";
 import Icon from "@/components/Icon";
 import {
@@ -30,6 +31,19 @@ type Draft = {
 };
 
 type Problem = { field: string; message: string };
+type Font = { family: string; label: string; note: string; kind: string };
+
+/** طابع الخط، ليُقرأ من نظرة قبل قراءة الوصف. */
+const KIND_LABEL: Record<string, string> = {
+  sans: "حديث",
+  kufi: "كوفي",
+  display: "عناوين",
+  naskh: "نسخ",
+  system: "النظام",
+};
+
+/** جملة المعاينة: فيها حروف تتصل وتنفصل، وأرقام، لأن الجداول كلها أرقام. */
+const SAMPLE = "مزرعة زاد · ١٢ نعجة · 1,250 ل.س";
 
 const COLOR_LABELS: Record<string, string> = {
   primary: "اللون الأساسي",
@@ -44,22 +58,35 @@ const COLOR_LABELS: Record<string, string> = {
   text: "النص",
   text_muted: "النص الثانوي",
   border: "الحدود",
+  sidebar: "خلفية القائمة الجانبية",
+  sidebar_text: "لون خط القائمة الجانبية",
+  header: "خلفية الشريط العلوي",
+  header_text: "لون خط الشريط العلوي",
 };
 
-const FONTS = ["Cairo", "Tajawal", "IBM Plex Sans Arabic", "Noto Sans Arabic", "Almarai", "System"];
+/** إطار الشاشة يُلوَّن على حدة عن محتواها، فيُعرض في مجموعة تخصّه. */
+const CHROME_COLORS = ["sidebar", "sidebar_text", "header", "header_text"];
+const CONTENT_COLORS = Object.keys(COLOR_LABELS).filter((key) => !CHROME_COLORS.includes(key));
 
 export default function ThemePage() {
   const { can, me, reloadTheme } = useApp();
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [fonts, setFonts] = useState<Font[]>([]);
   const [problems, setProblems] = useState<Problem[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function load() {
-    const data = await api.get<{ draft: Draft; problems: Problem[] }>("/theme/draft/");
+    const data = await api.get<{ draft: Draft; problems: Problem[]; fonts: Font[] }>(
+      "/theme/draft/"
+    );
     setDraft(data.draft);
     setProblems(data.problems);
+    setFonts(data.fonts ?? []);
+    // هذه الشاشة وحدها تعرض كل الخطوط جنبًا إلى جنب، فتحتاجها كلها محمّلة
+    // لتكون المعاينة صادقة. بقية الشاشات تحمّل الخط المختار فقط.
+    preloadFonts((data.fonts ?? []).map((font) => font.family));
   }
 
   useEffect(() => {
@@ -106,9 +133,13 @@ export default function ThemePage() {
         dark_mode_enabled: draft.dark_mode_enabled,
         dashboard_widgets: draft.dashboard_widgets,
       };
-      const res = await api.patch<{ draft: Draft; problems: Problem[] }>("/theme/draft/", body);
+      const res = await api.patch<{ draft: Draft; problems: Problem[]; fonts: Font[] }>(
+        "/theme/draft/",
+        body
+      );
       setDraft(res.draft);
       setProblems(res.problems);
+      if (res.fonts?.length) setFonts(res.fonts);
       setNotice(res.problems.length ? "حُفظت المسودة، لكن هناك ملاحظات قبل النشر" : "حُفظت المسودة");
     } catch (err: any) {
       setError(err.message);
@@ -216,15 +247,38 @@ export default function ThemePage() {
               الخط والشكل
             </span>
           </div>
-          <div className="row">
-            <div className="field">
-              <label>نوع الخط</label>
-              <select value={draft.font_family} onChange={(e) => update({ font_family: e.target.value })} disabled={readOnly}>
-                {FONTS.map((font) => (
-                  <option key={font} value={font}>{font}</option>
-                ))}
-              </select>
+          {/* الخط يُختار بالنظر إليه لا بقراءة اسمه: كل بطاقة مكتوبة بخطّها. */}
+          <div className="field">
+            <label>نوع الخط</label>
+            <div className="font-grid">
+              {fonts.map((font) => {
+                const active = draft.font_family === font.family;
+                return (
+                  <button
+                    type="button"
+                    key={font.family}
+                    className={`font-card${active ? " active" : ""}`}
+                    onClick={() => !readOnly && update({ font_family: font.family })}
+                    disabled={readOnly}
+                    aria-pressed={active}
+                    title={font.note}
+                  >
+                    <span className="font-card-head">
+                      <span className="font-card-name">{font.label}</span>
+                      <span className="badge badge-muted">{KIND_LABEL[font.kind] ?? font.kind}</span>
+                      {active && <Icon name="check" size={15} className="font-card-tick" />}
+                    </span>
+                    <span className="font-card-sample" style={{ fontFamily: fontStack(font.family) }}>
+                      {SAMPLE}
+                    </span>
+                    <span className="font-card-note">{font.note}</span>
+                  </button>
+                );
+              })}
             </div>
+          </div>
+
+          <div className="row">
             <div className="field">
               <label>حجم الخط ({Number(draft.font_scale).toFixed(2)})</label>
               <input
@@ -269,7 +323,7 @@ export default function ThemePage() {
             </span>
           </div>
           <div className="swatch-row">
-            {Object.keys(COLOR_LABELS).map((key) => (
+            {CONTENT_COLORS.map((key) => (
               <div className="field" key={key}>
                 <label>{COLOR_LABELS[key]}</label>
                 <input
@@ -281,6 +335,31 @@ export default function ThemePage() {
               </div>
             ))}
           </div>
+
+          <div className="divider" />
+          <div className="card-title">
+            <span className="inline">
+              <Icon name="blocks" size={17} className="muted" />
+              القائمة الجانبية والشريط العلوي
+            </span>
+          </div>
+          <div className="swatch-row">
+            {CHROME_COLORS.map((key) => (
+              <div className="field" key={key}>
+                <label>{COLOR_LABELS[key]}</label>
+                <input
+                  type="color"
+                  value={colors[key] ?? "#000000"}
+                  onChange={(e) => updateColor(key, e.target.value.toUpperCase())}
+                  disabled={readOnly}
+                />
+              </div>
+            ))}
+          </div>
+          <span className="stat-hint">
+            جرّب قائمة داكنة بلون هويتك ونصًّا فاتحًا — المحتوى يبقى أبيض هادئًا،
+            والعناصر داخل القائمة تتبع لون خطّها تلقائيًا.
+          </span>
         </div>
       </div>
 
@@ -292,11 +371,59 @@ export default function ThemePage() {
           </span>
           <span className="badge badge-muted">v{draft.tokens.version}</span>
         </div>
+        {/* المعاينة تُظهر الشاشة كما هي: قائمة جانبية وشريط علوي ومحتوى —
+            لأن ألوان الإطار لا يمكن الحكم عليها إلا داخل شكل الإطار. */}
         <div className="preview">
           <div className="preview-head" style={{ background: colors.primary, color: colors.primary_contrast }}>
             {draft.brand_name || "مزرعتي"} — {draft.brand_tagline || "لوحة الإدارة"}
           </div>
-          <div className="preview-body" style={{ background: colors.background, color: colors.text }}>
+
+          <div className="preview-chrome">
+            <div
+              className="preview-side"
+              style={{ background: colors.sidebar, color: colors.sidebar_text }}
+            >
+              <div className="preview-side-brand">{draft.brand_name || "مزرعتي"}</div>
+              {["الرئيسية", "الحيوانات", "المالية"].map((item, index) => (
+                <div
+                  key={item}
+                  className="preview-side-link"
+                  style={
+                    index === 1
+                      ? {
+                          background: `color-mix(in srgb, ${colors.primary} 14%, transparent)`,
+                          color: `color-mix(in srgb, ${colors.primary} 55%, ${colors.sidebar_text})`,
+                          fontWeight: 700,
+                        }
+                      : { color: `color-mix(in srgb, ${colors.sidebar_text} 62%, transparent)` }
+                  }
+                >
+                  {item}
+                </div>
+              ))}
+            </div>
+
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div
+                className="preview-top"
+                style={{
+                  background: colors.header,
+                  color: colors.header_text,
+                  borderBottom: `1px solid ${colors.border}`,
+                }}
+              >
+                <span style={{ fontWeight: 700 }}>الحيوانات</span>
+                <span
+                  style={{
+                    marginInlineStart: "auto",
+                    fontSize: "0.78rem",
+                    color: `color-mix(in srgb, ${colors.header_text} 65%, transparent)`,
+                  }}
+                >
+                  ٣ تنبيهات · أبو محمد
+                </span>
+              </div>
+              <div className="preview-body" style={{ background: colors.background, color: colors.text }}>
             <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: draft.corner_radius, padding: 16 }}>
               <div style={{ color: colors.text_muted, fontSize: "0.85rem" }}>النقد المتوفر</div>
               <div style={{ fontWeight: 700, fontSize: "1.6rem" }}>9,045 USD</div>
@@ -319,6 +446,8 @@ export default function ThemePage() {
               >
                 إضافة مصروف
               </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -141,6 +141,90 @@ class ThemeTests(TestCase):
         problems = theme_services.validate_theme(draft)
         self.assertTrue(any(p["field"] == "font_family" for p in problems))
 
+    def test_the_frame_has_its_own_colors_and_they_default_to_todays_look(self):
+        """القائمة الجانبية والشريط العلوي يُلوَّنان على حدة.
+
+        وقيمتهما الافتراضية هي لون البطاقات ولون النص نفسهما، فمزرعة قائمة لا
+        يتغيّر شكلها لمجرد أن الحقول أُضيفت.
+        """
+        payload = theme_services.published_payload(self.farm)
+        colors = payload["colors"]
+        for key in ("sidebar", "sidebar_text", "header", "header_text"):
+            self.assertIn(key, colors)
+        self.assertEqual(colors["sidebar"], colors["surface"])
+        self.assertEqual(colors["sidebar_text"], colors["text"])
+        self.assertEqual(colors["header"], colors["surface"])
+        self.assertEqual(colors["header_text"], colors["text"])
+
+    def test_a_dark_sidebar_with_light_text_is_accepted(self):
+        theme_services.save_draft(
+            self.farm, {"colors": {"sidebar": "#0F2A1D", "sidebar_text": "#F1F5F9"}}
+        )
+        theme = theme_services.publish(self.farm)
+        self.assertEqual(theme.colors["sidebar"], "#0F2A1D")
+        self.assertEqual(
+            theme_services.published_payload(self.farm)["colors"]["sidebar_text"], "#F1F5F9"
+        )
+
+    def test_an_unreadable_sidebar_is_refused(self):
+        """نص فاتح على قائمة فاتحة يجعل أسماء الأقسام غير مقروءة."""
+        theme_services.save_draft(
+            self.farm, {"colors": {"sidebar": "#FFFFFF", "sidebar_text": "#F8FAFC"}}
+        )
+        with self.assertRaises(ValidationError):
+            theme_services.publish(self.farm)
+
+    def test_an_unreadable_header_is_refused(self):
+        theme_services.save_draft(
+            self.farm, {"colors": {"header": "#111827", "header_text": "#1F2937"}}
+        )
+        with self.assertRaises(ValidationError):
+            theme_services.publish(self.farm)
+
+    def test_every_offered_font_is_a_font_the_theme_accepts(self):
+        """القائمة المعروضة للاختيار هي نفسها التي يقبلها التحقق.
+
+        لو افترقتا لظهر خط في الشاشة يرفضه الخادم عند النشر — أسوأ من ألا
+        يُعرض أصلًا.
+        """
+        from apps.theme.models import FONT_CATALOG
+
+        draft = theme_services.get_draft(self.farm)
+        for family, label, note, kind in FONT_CATALOG:
+            draft.font_family = family
+            draft.save()
+            problems = theme_services.validate_theme(draft)
+            self.assertFalse(
+                [p for p in problems if p["field"] == "font_family"],
+                f"الخط {family} معروض لكنه مرفوض",
+            )
+            self.assertTrue(label and note and kind, f"الخط {family} ينقصه وصف عربي")
+
+    def test_the_font_list_travels_with_the_draft(self):
+        """الشاشة ترسم الخيارات من رد الخادم، فلا تحتفظ بنسخة ثانية تتقادم."""
+        client = APIClient()
+        client.force_authenticate(user=self.owner)
+        client.credentials(HTTP_X_FARM=self.farm.slug)
+
+        response = client.get("/api/v1/theme/draft/")
+        self.assertEqual(response.status_code, 200)
+        fonts = response.json()["fonts"]
+        families = [font["family"] for font in fonts]
+        self.assertIn("Cairo", families)
+        self.assertIn("Tajawal", families)
+        self.assertTrue(all(font["label"] for font in fonts))
+
+    def test_choosing_a_font_reaches_the_clients_that_draw_it(self):
+        client = APIClient()
+        client.force_authenticate(user=self.owner)
+        client.credentials(HTTP_X_FARM=self.farm.slug)
+
+        client.patch("/api/v1/theme/draft/", {"font_family": "Almarai"}, format="json")
+        self.assertEqual(client.post("/api/v1/theme/publish/").status_code, 200)
+
+        payload = theme_services.published_payload(self.farm)
+        self.assertEqual(payload["typography"]["font_family"], "Almarai")
+
     def test_theme_endpoint_serves_tokens_to_clients(self):
         client = APIClient()
         client.force_authenticate(user=self.owner)
