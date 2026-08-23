@@ -1,0 +1,50 @@
+# البوّاب: دومين واحد يقود إلى خدمتين.
+#
+# الشهادة تُطلب من Let's Encrypt وتُجدَّد تلقائيًا ما دام المنفذان 80 و443
+# مفتوحين والدومين يشير إلى هذا الخادم. لا شيء يدويّ هنا.
+#
+# لماذا دومين واحد لا اثنان: اللوحة والـ API على نفس الأصل، فلا CORS ولا
+# شهادة ثانية ولا سجل DNS ثانٍ — والمتصفح ينادي /api/v1 من نفس الصفحة.
+
+{
+	email {$ACME_EMAIL}
+	# مُصدر واحد صريح: Let's Encrypt.
+	# الافتراضي يجرّب مُصدرًا احتياطيًا عند أول فشل، وأول فشل هنا سببه المعتاد
+	# أن الدومين لم يكن قد وُجّه بعد — فينتقل إلى مُصدر آخر ويعلق عنده بدل أن
+	# يعيد المحاولة على الصحيح. مُصدر واحد يعني رسالة خطأ واحدة مفهومة.
+	acme_ca https://acme-v02.api.letsencrypt.org/directory
+}
+
+www.{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# ما يخصّ Django: الـ API، لوحته الإدارية، وملفاته الثابتة.
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+	handle /admin/* {
+		reverse_proxy api:8000
+	}
+	handle /static/* {
+		reverse_proxy api:8000
+	}
+
+	# وكل ما عداه لوحة الإدارة.
+	handle {
+		reverse_proxy web:3000
+	}
+
+	# رفع صورة أو فاتورة يصل كـ data URI داخل الطلب، فالحدّ الافتراضي ضيّق.
+	request_body {
+		max_size 25MB
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

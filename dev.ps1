@@ -9,8 +9,14 @@
 
     الخروج بـ Ctrl+C يُغلق العمليتين معًا، فلا يبقى منفذ محجوزًا.
 
+    الوضع السريع: -Prod يبني اللوحة مرة واحدة ثم يشغّلها مبنيّة. في وضع
+    التطوير تُترجم كل شاشة عند أول فتح لها، وهذا سبب «جارٍ التحميل…» الطويل
+    عند التنقّل؛ النسخة المبنية تفتح فورًا. استعمله حين تعمل على المزرعة لا
+    على الكود.
+
 .EXAMPLE
     .\dev.ps1
+    .\dev.ps1 -Prod              # لوحة مبنية: أسرع فتح للشاشات
     .\dev.ps1 -Backend 8001 -Frontend 3001
     .\dev.ps1 -NoFrontend        # الخادم وحده
 #>
@@ -20,7 +26,8 @@ param(
     [int]$Backend = 8000,
     [int]$Frontend = 3000,
     [switch]$NoFrontend,
-    [switch]$NoBackend
+    [switch]$NoBackend,
+    [switch]$Prod
 )
 
 $ErrorActionPreference = "Stop"
@@ -86,11 +93,30 @@ try {
     }
 
     if (-not $NoFrontend) {
-        Write-Step "لوحة الإدارة على المنفذ $Frontend …"
         $npm = (Get-Command npm).Source
-        $jobs += Start-Process -PassThru -NoNewWindow -FilePath $npm `
-            -ArgumentList "run", "dev", "--", "-p", "$Frontend" `
-            -WorkingDirectory (Join-Path $root "admin-web")
+        $web = Join-Path $root "admin-web"
+
+        if ($Prod) {
+            # البناء مرة واحدة هنا، ثم التشغيل: الشاشات تُفتح مترجمة جاهزة
+            # بدل أن تُترجم واحدة واحدة عند أول زيارة لكل واحدة منها.
+            Write-Step "بناء اللوحة (مرة واحدة، قد يستغرق دقيقة) …"
+            $build = Start-Process -PassThru -NoNewWindow -Wait -FilePath $npm `
+                -ArgumentList "run", "build" -WorkingDirectory $web
+            if ($build.ExitCode -ne 0) {
+                Write-Bad "فشل بناء اللوحة."
+                return
+            }
+            Write-Step "لوحة الإدارة (مبنيّة) على المنفذ $Frontend …"
+            $jobs += Start-Process -PassThru -NoNewWindow -FilePath $npm `
+                -ArgumentList "run", "start", "--", "-p", "$Frontend" `
+                -WorkingDirectory $web
+        }
+        else {
+            Write-Step "لوحة الإدارة على المنفذ $Frontend …"
+            $jobs += Start-Process -PassThru -NoNewWindow -FilePath $npm `
+                -ArgumentList "run", "dev", "--", "-p", "$Frontend" `
+                -WorkingDirectory $web
+        }
     }
 
     Start-Sleep -Seconds 3

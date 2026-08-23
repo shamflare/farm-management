@@ -1,0 +1,27 @@
+# الخادم: Django خلف gunicorn.
+#
+# البناء من جذر المستودع (context: ..) لأن requirements.txt يعيش هناك بينما
+# الكود في backend/ — والصورة تحتاج الاثنين.
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY backend/ ./backend/
+COPY deploy/api-entrypoint.sh /usr/local/bin/api-entrypoint.sh
+RUN chmod +x /usr/local/bin/api-entrypoint.sh
+
+WORKDIR /app/backend
+
+# ملفات لوحة Django وتوثيق الـ API تُجمع وقت البناء لا وقت الإقلاع، فالإقلاع
+# يبقى ثوانٍ. لا تحتاج قاعدة بيانات، لذلك تصلح داخل البناء.
+RUN DJANGO_SECRET_KEY=build-only python manage.py collectstatic --noinput
+
+EXPOSE 8000
+ENTRYPOINT ["api-entrypoint.sh"]

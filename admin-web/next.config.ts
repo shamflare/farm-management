@@ -19,6 +19,12 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_API_URL: apiUrl,
   },
+  // نشر بالحاويات: البناء يُخرج خادمًا مستقلًا مع ما يلزمه فقط، فتصير صورة
+  // التشغيل عشرات الميغابايت بدل مئاتها، ولا تحتاج node_modules معها.
+  //
+  // ولا يُفعَّل إلا داخل البناء للحاوية: `next start` لا يعمل مع هذا الوضع،
+  // وهو ما يشغّل به المستخدم لوحته على جهازه (`npm run serve`).
+  output: process.env.NEXT_STANDALONE === "1" ? "standalone" : undefined,
 };
 
 export default nextConfig;

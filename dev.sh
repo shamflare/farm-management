@@ -35,7 +35,13 @@ echo "  ----------------------------------"
 ( cd "$ROOT/backend" && "$PYTHON" manage.py runserver "0.0.0.0:$BACKEND_PORT" ) &
 pids+=($!)
 
-( cd "$ROOT/admin-web" && npm run dev -- -p "$FRONTEND_PORT" ) &
+# PROD=1 يبني اللوحة مرة واحدة ثم يشغّلها مبنيّة: الشاشات تُفتح فورًا بدل أن
+# تُترجم واحدة واحدة عند أول زيارة لكل واحدة منها.
+if [ "${PROD:-0}" = "1" ]; then
+  ( cd "$ROOT/admin-web" && npm run build && npm run start -- -p "$FRONTEND_PORT" ) &
+else
+  ( cd "$ROOT/admin-web" && npm run dev -- -p "$FRONTEND_PORT" ) &
+fi
 pids+=($!)
 
 sleep 3

@@ -2,6 +2,8 @@
 __pycache__/
 *.pyc
 db.sqlite3
+*.sqlite3
+backups/
 .env
 media/
 staticfiles/
@@ -10,3 +12,5 @@ node_modules/
 out/
 *.log
 .DS_Store
+deploy/.env
+tsconfig.tsbuildinfo

@@ -1,0 +1,81 @@
+# نشر المزرعة على خادم واحد.
+#
+# أربع حاويات: قاعدة البيانات، الخادم، اللوحة، وبوّاب أمامهم يتولّى الدومين
+# وشهادة HTTPS ويجدّدها وحده. القاعدة وحدها تملك حجمًا دائمًا لأن كل شيء آخر
+# — حتى صور الحيوانات والفواتير — يعيش داخلها.
+#
+#   docker compose -f deploy/docker-compose.yml up -d --build
+
+name: zadfarm
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-farm}
+      POSTGRES_USER: ${POSTGRES_USER:-farm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?اضبط POSTGRES_PASSWORD في ملف .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-farm}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-farm}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-farm}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?اضبط DJANGO_SECRET_KEY في ملف .env}
+      DJANGO_DEBUG: "0"
+      DJANGO_ALLOWED_HOSTS: ${DOMAIN},www.${DOMAIN},api,localhost,127.0.0.1
+      CSRF_TRUSTED_ORIGINS: https://${DOMAIN},https://www.${DOMAIN}
+      CORS_ORIGINS: https://${DOMAIN}
+      FARM_TIMEZONE: ${FARM_TIMEZONE:-Asia/Damascus}
+      FARM_NAME: ${FARM_NAME:-مزرعة زاد}
+      FARM_SLUG: ${FARM_SLUG:-zadfarm}
+      OWNER_USERNAME: ${OWNER_USERNAME:-owner}
+      OWNER_NAME: ${OWNER_NAME:-صاحب المزرعة}
+      OWNER_PASSWORD: ${OWNER_PASSWORD:?اضبط OWNER_PASSWORD في ملف .env}
+      OWNER_PASSWORD_RESET: ${OWNER_PASSWORD_RESET:-0}
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+      args:
+        # مسار نسبي: اللوحة والـ API على نفس الدومين، فالمتصفح ينادي نفسه.
+        NEXT_PUBLIC_API_URL: /api/v1
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?اضبط DOMAIN في ملف .env}
+      ACME_EMAIL: ${ACME_EMAIL:?اضبط ACME_EMAIL في ملف .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+      - api
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

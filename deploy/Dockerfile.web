@@ -1,0 +1,31 @@
+# لوحة الإدارة: Next.js مبنيّة، تُشغَّل بـ node وحده.
+#
+# عنوان الـ API يُحقن وقت البناء لأن المتصفح هو من ينادي الـ API، والقيمة
+# تُخبز داخل الحزمة. القيمة الافتراضية مسار نسبي: اللوحة والـ API خلف نفس
+# الدومين، فلا حاجة لعنوان كامل ولا لسياسة CORS أصلًا.
+FROM node:22-alpine AS build
+
+WORKDIR /app
+COPY admin-web/package.json admin-web/package-lock.json ./
+RUN npm ci
+
+COPY admin-web/ ./
+ARG NEXT_PUBLIC_API_URL=/api/v1
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# الوضع المستقل يُطلب هنا فقط: البناء المحلي يبقى عاديًا ليعمل `next start`.
+ENV NEXT_STANDALONE=1
+RUN npm run build
+
+# --- صورة التشغيل: الناتج المستقل فقط، بلا node_modules كاملة -------------
+FROM node:22-alpine
+
+WORKDIR /app
+ENV NODE_ENV=production \
+    PORT=3000 \
+    HOSTNAME=0.0.0.0
+
+COPY --from=build /app/.next/standalone ./
+COPY --from=build /app/.next/static ./.next/static
+
+EXPOSE 3000
+CMD ["node", "server.js"]
