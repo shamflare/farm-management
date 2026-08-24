@@ -448,6 +448,39 @@ svg {
   border-color: color-mix(in srgb, var(--color-header-text) 18%, transparent);
 }
 
+/*
+ * الأزرار ذات الخلفية داخل الشريط.
+ *
+ * `.btn-ghost` يحمل خلفية بيضاء (لون البطاقات) وحدودًا رمادية، فكان يظهر
+ * كقرص أبيض فوق شريط ملوّن مهما غُيّر لون الشريط: النص يتبع اللون والخلفية لا
+ * تتبعه. هنا يصير الزر شفافًا يأخذ لونه كله من لون خط الشريط.
+ */
+.topbar .btn-ghost,
+.topbar-tools .btn-ghost,
+.topbar .btn-ghost:hover:not(:disabled),
+.topbar-tools .btn-ghost:hover:not(:disabled) {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--color-header-text) 18%, transparent);
+  box-shadow: none;
+}
+
+.topbar .btn-ghost:hover:not(:disabled),
+.topbar-tools .btn-ghost:hover:not(:disabled) {
+  background: var(--header-hover);
+  color: var(--color-header-text);
+  border-color: color-mix(in srgb, var(--color-header-text) 34%, transparent);
+}
+
+/* زر الفعل الأساسي يبقى بلون الهوية — لكن بحلقة رفيعة تفصله عن شريط بلونه */
+.topbar .btn-primary {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-header-text) 20%, transparent);
+}
+
+/* عدّاد التنبيهات يُقرأ على شريط داكن كما على فاتح */
+.topbar .dot {
+  border: 1px solid color-mix(in srgb, var(--color-header) 70%, transparent);
+}
+
 .sidebar .icon-btn {
   color: var(--sidebar-muted);
 }
@@ -653,12 +686,19 @@ svg {
 
 /* --- 7. البطاقات ------------------------------------------------------- */
 
+/*
+ * البطاقة: سطح واحد يحمل كل شيء.
+ *
+ * الحدّ وحده يجعلها مربّعًا مرسومًا؛ والظل وحده يجعلها تطفو بلا سبب. الاثنان
+ * معًا بمقدار خفيف يعطيان ما يكفي لتُقرأ كوحدة: حدّ شبه شفاف، وظل واسع
+ * منخفض الشدّة يفصلها عن الخلفية بلا أن يُرى.
+ */
 .card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   padding: var(--s5);
-  box-shadow: var(--shadow-xs);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -12px rgba(15, 23, 42, 0.12);
 }
 
 .card-title {
@@ -716,16 +756,42 @@ svg {
 
 /* --- 8. الإحصاءات ------------------------------------------------------ */
 
+/*
+ * بطاقة الرقم.
+ *
+ * الرقم هو المنتَج: يُقرأ من بعيد وبطرف العين، فيأخذ أكبر حجم في البطاقة
+ * وأثقل وزن. العنوان فوقه صغير وهادئ لأنه يُقرأ مرة ثم يُحفظ، والشرح تحته
+ * أصغر لأنه يُقرأ عند الحاجة وحدها.
+ */
 .stat {
+  position: relative;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  padding: var(--s4) var(--s5);
-  box-shadow: var(--shadow-xs);
+  border-radius: var(--radius-lg);
+  padding: var(--s5);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -12px rgba(15, 23, 42, 0.12);
   display: flex;
   flex-direction: column;
   gap: 2px;
-  transition: border-color 0.16s var(--ease), box-shadow 0.16s var(--ease);
+  overflow: hidden;
+  transition: border-color 0.16s var(--ease), box-shadow 0.16s var(--ease),
+    transform 0.16s var(--ease);
+}
+
+/* خيط لوني رفيع في الأعلى يقول نوع الرقم قبل قراءته */
+.stat::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 3px;
+  background: color-mix(in srgb, var(--color-primary) 55%, transparent);
+  opacity: 0;
+  transition: opacity 0.16s var(--ease);
+}
+
+.stat:hover::before {
+  opacity: 1;
 }
 
 .stat:hover {
@@ -742,19 +808,21 @@ svg {
 
 .stat-label {
   color: var(--color-text-muted);
-  font-size: 0.8rem;
-  font-weight: 500;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .stat-icon {
-  width: 30px;
-  height: 30px;
-  border-radius: var(--radius-sm);
+  width: 34px;
+  height: 34px;
+  border-radius: calc(var(--radius-sm) + 2px);
   display: grid;
   place-items: center;
-  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 11%, transparent);
   color: var(--color-primary);
   flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 12%, transparent);
 }
 
 .stat-icon svg {
@@ -788,11 +856,11 @@ svg {
 }
 
 .stat-value {
-  font-size: 1.55rem;
+  font-size: 1.75rem;
   font-weight: 700;
-  line-height: 1.25;
-  letter-spacing: -0.02em;
-  margin-top: 2px;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+  margin-top: var(--s2);
 }
 
 .stat-hint {
@@ -1860,6 +1928,15 @@ select.input {
   color: var(--color-primary);
   font-weight: 700;
   font-size: 0.78rem;
+}
+
+/* صفّ يُضاء تحت المؤشر: العين تتبع سطرًا في جدول عريض بلا أن تضلّ */
+.table-wrap tbody tr {
+  transition: background 0.12s var(--ease);
+}
+
+.table-wrap tbody tr:hover {
+  background: color-mix(in srgb, var(--color-primary) 4%, transparent);
 }
 
 /* رأس الجدول يبقى ظاهرًا أثناء التمرير: صف بلا عنوان فوقه أرقام بلا معنى */
