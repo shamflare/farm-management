@@ -191,6 +191,7 @@ export default function DashboardPage() {
         {show("cash") && (
           <Stat
             label="النقد المتوفر"
+            href="/finance"
             value={money(m.cash_on_hand, currency)}
             hint="الصناديق والحسابات البنكية"
             icon="wallet"
@@ -199,6 +200,7 @@ export default function DashboardPage() {
         {show("profit") && (
           <Stat
             label="صافي الربح للفترة"
+            href="/reports"
             value={money(m.net_profit, currency)}
             valueTone={m.net_profit >= 0 ? "positive" : "negative"}
             hint={`إيراد ${money(m.income, currency)} · مصروف ${money(m.expenses, currency)}`}
@@ -209,6 +211,7 @@ export default function DashboardPage() {
         {show("livestock") && (
           <Stat
             label="قيمة الحيوانات"
+            href="/animals"
             value={money(a.estimated_value, currency)}
             hint={`${formatNumber(a.on_farm)} حيوان في المزرعة`}
             icon="sheep"
@@ -227,6 +230,7 @@ export default function DashboardPage() {
         {show("receivable") && (
           <Stat
             label="لنا عند الناس"
+            href="/parties"
             value={money(m.owed_to_farm, currency)}
             hint="ذمم العملاء"
             icon="arrowEnd"
@@ -236,6 +240,7 @@ export default function DashboardPage() {
         {show("payable") && (
           <Stat
             label="علينا للناس"
+            href="/parties"
             value={money(m.owed_by_farm, currency)}
             hint="ذمم الموردين"
             icon="arrowStart"
@@ -283,6 +288,7 @@ export default function DashboardPage() {
         {show("founding") && (
           <Stat
             label="التكاليف التأسيسية"
+            href="/founding-costs"
             value={money(data.founding_total ?? 0, currency)}
             hint="خارج حساب أرباح الفترة"
             icon="building"

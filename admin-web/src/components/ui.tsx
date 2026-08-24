@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import Icon, { IconName } from "@/components/Icon";
 
 /* --- ترويسة الصفحة ---------------------------------------------------- */
@@ -50,6 +51,7 @@ export function Stat({
   icon,
   tone,
   valueTone,
+  href,
 }: {
   label: string;
   value: React.ReactNode;
@@ -59,9 +61,16 @@ export function Stat({
   tone?: Tone;
   /** لون الرقم نفسه — للربح والخسارة. */
   valueTone?: "positive" | "negative";
+  /**
+   * الشاشة التي يأتي منها هذا الرقم.
+   *
+   * الرقم على لوحة المعلومات نهاية سؤال وبداية آخر: «النقد ٩٠٤٥» يُتبع دائمًا
+   * بـ «من أين؟». الوصلة تختصر الطريق إلى الجواب بدل البحث عنه في القائمة.
+   */
+  href?: string;
 }) {
-  return (
-    <div className="stat">
+  const body = (
+    <>
       <div className="stat-head">
         <div className="stat-label">{label}</div>
         {icon && (
@@ -72,8 +81,17 @@ export function Stat({
       </div>
       <div className={`stat-value num ${valueTone ?? ""}`}>{value}</div>
       {hint && <div className="stat-hint">{hint}</div>}
-    </div>
+    </>
   );
+
+  if (href) {
+    return (
+      <Link href={href} className="stat stat-link">
+        {body}
+      </Link>
+    );
+  }
+  return <div className="stat">{body}</div>;
 }
 
 /* --- الرسائل ---------------------------------------------------------- */

@@ -1826,6 +1826,141 @@ select.input {
   }
 }
 
+/* بطاقة رقم تفتح شاشتها: ترتفع قليلًا تحت المؤشر لتقول إنها تُضغط */
+.stat-link {
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.15s var(--ease), box-shadow 0.15s var(--ease),
+    border-color 0.15s var(--ease);
+}
+
+.stat-link:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+/* --- التسجيل السريع ولوحة الانتقال ------------------------------------- */
+
+.modal.quick {
+  width: min(560px, 100%);
+}
+
+/* الرقم هو ما جاء المستخدم ليكتبه، فيُعطى حجم ما جاء لأجله */
+.quick-amount {
+  font-size: 1.7rem !important;
+  font-weight: 700;
+  text-align: center;
+  height: calc(var(--control-h) * 1.35);
+}
+
+.quick-results {
+  margin-top: var(--s2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  max-height: 210px;
+  overflow-y: auto;
+}
+
+.quick-result {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  width: 100%;
+  padding: var(--s3) var(--s4);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: start;
+  font: inherit;
+  color: var(--color-text);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.quick-result:last-child {
+  border-bottom: none;
+}
+
+.quick-result:hover {
+  background: var(--surface-hover);
+}
+
+/* لوحة الانتقال تجلس أعلى الشاشة: العين تبدأ من فوق حين تكتب */
+.modal.palette {
+  width: min(620px, 100%);
+  padding: 0;
+  align-self: flex-start;
+  margin-top: 12vh;
+}
+
+.palette-field {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s4) var(--s5);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.palette-field input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 1.05rem;
+  color: var(--color-text);
+  outline: none;
+  min-width: 0;
+}
+
+.palette-list {
+  max-height: 46vh;
+  overflow-y: auto;
+  padding: var(--s2);
+}
+
+.palette-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  width: 100%;
+  padding: var(--s3) var(--s4);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  text-align: start;
+  font: inherit;
+  color: var(--color-text);
+}
+
+.palette-row.active {
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+
+.palette-foot {
+  display: flex;
+  gap: var(--s4);
+  flex-wrap: wrap;
+  padding: var(--s3) var(--s5);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 0.74rem;
+}
+
+kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  margin: 0 2px;
+  border: 1px solid var(--color-border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--surface-sunken);
+  font-family: inherit;
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+
 /* --- 20. الاستجابة ----------------------------------------------------- */
 
 .nav-backdrop {

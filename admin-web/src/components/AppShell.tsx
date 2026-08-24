@@ -6,6 +6,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { api, clearSession, getCached, getToken } from "@/lib/api";
 import { applyTheme, FALLBACK_TOKENS, ThemeTokens } from "@/lib/theme";
 import Icon, { IconName } from "@/components/Icon";
+import QuickRecord from "@/components/QuickRecord";
+import CommandPalette from "@/components/CommandPalette";
 
 type Alert = {
   kind: string;
@@ -165,6 +167,32 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [openMenu, setOpenMenu] = useState<"farm" | "user" | "alerts" | null>(null);
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  /**
+   * اختصاران فقط، وهما المتعارف عليهما في كل أداة:
+   * Ctrl+K للانتقال بالكتابة، Ctrl+I للتسجيل السريع.
+   * لا يعملان داخل حقل كتابة، فالكتابة أولى بالمفاتيح من الاختصارات.
+   */
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const inField = ["INPUT", "TEXTAREA", "SELECT"].includes(
+        (event.target as HTMLElement)?.tagName
+      );
+      if (!(event.ctrlKey || event.metaKey) || inField) return;
+      if (event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen(true);
+      }
+      if (event.key.toLowerCase() === "i") {
+        event.preventDefault();
+        setQuickOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const closeMenu = useCallback(() => setOpenMenu(null), []);
   const menuRef = useDismiss(closeMenu);
@@ -335,6 +363,27 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <span className="topbar-spacer" />
 
             <div className="topbar-tools" ref={menuRef}>
+              {/* التسجيل السريع أولًا: هو أكثر ما يُضغط في اليوم. */}
+              {(can("finance.create") || can("milk.create") || can("animals.edit")) && (
+                <button
+                  className="btn btn-primary btn-sm no-print"
+                  onClick={() => setQuickOpen(true)}
+                  title="تسجيل سريع (Ctrl+I)"
+                >
+                  <Icon name="plus" size={15} />
+                  <span className="only-desktop">تسجيل سريع</span>
+                </button>
+              )}
+
+              <button
+                className="icon-btn bordered no-print"
+                onClick={() => setPaletteOpen(true)}
+                title="ابحث وانتقل (Ctrl+K)"
+                aria-label="ابحث وانتقل"
+              >
+                <Icon name="search" size={18} />
+              </button>
+
               {/* تطبيق الجوال: رابط بدل إرسال ملف في واتساب مع كل إصدار.
                   الصفحة نفسها تعرف إن كان الملف مرفوعًا أو لا. */}
               <a
@@ -460,6 +509,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </header>
 
           <main className="main">{children}</main>
+
+          {quickOpen && <QuickRecord onClose={() => setQuickOpen(false)} />}
+          {paletteOpen && (
+            <CommandPalette
+              destinations={ALL_ITEMS.filter((item) => canAny(item.permission))}
+              onClose={() => setPaletteOpen(false)}
+            />
+          )}
         </div>
       </div>
     </AppContext.Provider>

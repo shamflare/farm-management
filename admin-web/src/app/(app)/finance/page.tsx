@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { api, download, formatDate, getCached, hasCache, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
+import { recallFrom, remember } from "@/lib/recall";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import Icon from "@/components/Icon";
 import {
@@ -468,6 +469,24 @@ function ExpenseForm({
       .map((p) => ({ value: `supplier:${p.id}`, label: `على حساب ${p.name} (آجل)` })),
   ];
 
+  // النموذج يفتح على آخر ما اختير: العلف يُدفع من نفس الصندوق ويُحمَّل على
+  // نفس الفرع كل أسبوع، والسؤال عنه في كل مرة عمل بلا فائدة.
+  useEffect(() => {
+    setForm((prev) => ({
+      ...prev,
+      branch: prev.branch || recallFrom("branch", branches),
+      category: prev.category || recallFrom("expense_category", categories),
+      payer:
+        prev.payer ||
+        recallFrom(
+          "payer",
+          payerOptions.map((option) => ({ id: option.value })),
+          payerOptions[0]?.value ?? ""
+        ),
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branches, categories, cashAccounts, parties]);
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -485,6 +504,10 @@ function ExpenseForm({
     try {
       const res = await api.post<{ ok: boolean; needs_approval: boolean }>("/ops/expense/", payload);
       onDone(res.needs_approval ? "تم التسجيل — بانتظار الموافقة" : "تم تسجيل المصروف");
+      remember("branch", form.branch);
+      remember("expense_category", form.category);
+      remember("payer", form.payer);
+      // المبلغ والملاحظة لا يُتذكّران: تكرار مبلغ بالخطأ خطأ محاسبي.
       setForm({ ...form, amount: "", memo: "" });
     } catch (err: any) {
       onError(err.message);

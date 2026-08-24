@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api, download, formatDate, formatNumber, getCached, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
+import { recallFrom, remember } from "@/lib/recall";
 import Icon from "@/components/Icon";
 import {
   Button,
@@ -303,8 +304,11 @@ function ProductionForm({
   const [error, setError] = useState("");
 
   useEffect(() => {
-    setForm((prev) => ({ ...prev, branch: prev.branch || defaultBranch }));
-  }, [defaultBranch]);
+    setForm((prev) => ({
+      ...prev,
+      branch: prev.branch || recallFrom("milk_branch", branches, defaultBranch),
+    }));
+  }, [defaultBranch, branches]);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -316,6 +320,7 @@ function ProductionForm({
         branch: form.branch || null,
         milking_animals: form.milking_animals ? Number(form.milking_animals) : null,
       });
+      remember("milk_branch", form.branch);
       onDone();
     } catch (err: any) {
       setError(err.message);
