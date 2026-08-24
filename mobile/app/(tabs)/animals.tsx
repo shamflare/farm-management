@@ -1,9 +1,10 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { useAnimals, useCatalog, useMe } from "../../src/api/queries";
 import { age, formatNumber, money, SEX_ICON, SEX_LABEL, statusTone } from "../../src/lib/format";
+import { recall, remember } from "../../src/lib/recall";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { DataCard } from "../../src/ui/cards";
 import { Body, Chips, Header, Screen } from "../../src/ui/layout";
@@ -22,7 +23,8 @@ export default function AnimalsScreen() {
   const theme = useTheme();
   const router = useRouter();
 
-  const [tab, setTab] = useState<string>(ALL);
+  // التبويب يبقى كما تركته: من يدير التسمين يفتح عليه لا على «الكل».
+  const [tab, setTab] = useState<string>(() => recall("animals_tab", ALL));
   const [search, setSearch] = useState("");
   const [onFarm, setOnFarm] = useState("true");
 
@@ -36,6 +38,10 @@ export default function AnimalsScreen() {
     search,
     is_on_farm: onFarm,
   });
+
+  useEffect(() => {
+    remember("animals_tab", tab);
+  }, [tab]);
 
   const rows = data?.results ?? [];
   const tabs = useMemo(

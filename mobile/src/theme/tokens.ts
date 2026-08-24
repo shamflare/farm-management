@@ -131,7 +131,8 @@ export const fontSize = {
   body: 15,
   title: 19,
   heading: 24,
-  display: 34,
+  // الرقم هو المنتَج: يُقرأ من نصف متر وبطرف العين
+  display: 36,
 };
 
 /**
@@ -143,9 +144,9 @@ export const fontSize = {
 export const shadow = {
   card: {
     shadowColor: "#0B120F",
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.07,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 6 },
     elevation: 2,
   },
   float: {

@@ -94,12 +94,14 @@ export default function HomeScreen() {
             <StatGrid>
               <StatCard
                 label="النقد المتوفر"
+                onPress={() => router.push("/money")}
                 value={shortMoney(money?.cash_on_hand, currency)}
                 icon="💵"
                 tone="primary"
               />
               <StatCard
                 label="صافي الربح"
+                onPress={() => router.push("/reports")}
                 value={shortMoney(money?.net_profit, currency)}
                 icon="📈"
                 tone={(money?.net_profit ?? 0) >= 0 ? "success" : "danger"}
@@ -107,12 +109,14 @@ export default function HomeScreen() {
               />
               <StatCard
                 label="في المزرعة"
+                onPress={() => router.push("/(tabs)/animals")}
                 value={formatNumber(data?.animals?.on_farm ?? 0)}
                 icon="🐑"
                 hint="رأس"
               />
               <StatCard
                 label="حليب الفترة"
+                onPress={() => router.push("/milk")}
                 value={`${formatNumber(data?.milk?.liters_produced ?? 0)} ل`}
                 icon="🥛"
                 tone="info"
@@ -187,12 +191,14 @@ export default function HomeScreen() {
             <StatGrid>
               <StatCard
                 label="لنا عند الناس"
+                onPress={() => router.push("/parties")}
                 value={shortMoney(money?.owed_to_farm, currency)}
                 icon="📥"
                 tone="success"
               />
               <StatCard
                 label="علينا للناس"
+                onPress={() => router.push("/parties")}
                 value={shortMoney(money?.owed_by_farm, currency)}
                 icon="📤"
                 tone="warning"

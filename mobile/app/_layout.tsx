@@ -13,6 +13,7 @@ import {
 } from "@expo-google-fonts/cairo";
 
 import { loadSession } from "../src/api/client";
+import { loadRecall } from "../src/lib/recall";
 import { useMe } from "../src/api/queries";
 import { ThemeProvider } from "../src/theme/ThemeProvider";
 
@@ -49,7 +50,8 @@ export default function RootLayout() {
   const [sessionReady, setSessionReady] = useState(false);
 
   useEffect(() => {
-    loadSession().finally(() => setSessionReady(true));
+    // الجلسة وآخر الاختيارات معًا: النماذج تُرسم مملوءة من أول لحظة.
+    Promise.all([loadSession(), loadRecall()]).finally(() => setSessionReady(true));
   }, []);
 
   useEffect(() => {

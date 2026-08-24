@@ -92,6 +92,7 @@ export function StatCard({
   tone,
   icon,
   wide,
+  onPress,
 }: {
   label: string;
   value: string;
@@ -99,26 +100,41 @@ export function StatCard({
   tone?: "primary" | "success" | "danger" | "warning" | "info";
   icon?: string;
   wide?: boolean;
+  /** الشاشة التي يأتي منها هذا الرقم — «من أين؟» سؤال يتبع كل رقم. */
+  onPress?: () => void;
 }) {
   const theme = useTheme();
   const accent = tone ? theme.colors[tone] : theme.colors.primary;
 
   return (
     <Card
+      onPress={onPress}
       style={{
         flex: wide ? undefined : 1,
         minWidth: wide ? "100%" : 150,
         gap: theme.space.xs,
         borderColor: alpha(accent, theme.isDark ? 0.35 : 0.18),
+        overflow: "hidden",
       }}
     >
+      {/* خيط بلون البطاقة في أعلاها: يقول نوع الرقم قبل قراءته */}
+      <View
+        style={{
+          position: "absolute",
+          top: 0,
+          insetInlineStart: 0,
+          insetInlineEnd: 0,
+          height: 3,
+          backgroundColor: alpha(accent, 0.55),
+        }}
+      />
       <View style={{ flexDirection: "row", alignItems: "center", gap: theme.space.sm }}>
         {!!icon && (
           <View
             style={{
-              width: 30,
-              height: 30,
-              borderRadius: 10,
+              width: 32,
+              height: 32,
+              borderRadius: 11,
               backgroundColor: alpha(accent, theme.isDark ? 0.24 : 0.12),
               alignItems: "center",
               justifyContent: "center",
@@ -127,11 +143,18 @@ export function StatCard({
             <T variant="small">{icon}</T>
           </View>
         )}
-        <T variant="small" muted numberOfLines={1} style={{ flex: 1 }}>
+        <T variant="micro" weight="medium" muted numberOfLines={1} style={{ flex: 1 }}>
           {label}
         </T>
       </View>
-      <T variant="display" weight="bold" color={accent} numberOfLines={1} adjustsFontSizeToFit>
+      <T
+        variant="display"
+        weight="bold"
+        color={accent}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        style={{ marginTop: 2, letterSpacing: -0.5 }}
+      >
         {value}
       </T>
       {!!hint && (
