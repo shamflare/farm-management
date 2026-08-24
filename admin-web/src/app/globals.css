@@ -1815,6 +1815,17 @@ select.input {
   line-height: 1.6;
 }
 
+/* نص يختفي على الشاشات الضيقة وتبقى أيقونته — للأزرار التي تُشرح بكلمة */
+.only-desktop {
+  display: inline;
+}
+
+@media (max-width: 700px) {
+  .only-desktop {
+    display: none;
+  }
+}
+
 /* --- 20. الاستجابة ----------------------------------------------------- */
 
 .nav-backdrop {

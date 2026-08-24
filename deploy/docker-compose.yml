@@ -69,6 +69,9 @@ services:
       ACME_EMAIL: ${ACME_EMAIL:?اضبط ACME_EMAIL في ملف .env}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # صفحة تنزيل التطبيق. الـ APK نفسه يُوضع هنا بـ deploy/publish-apk.sh
+      # ولا يدخل المستودع — ملف ثنائي بحجم عشرات الميغابايت لا مكان له في Git.
+      - ./public/app:/srv/app
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

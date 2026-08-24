@@ -335,6 +335,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <span className="topbar-spacer" />
 
             <div className="topbar-tools" ref={menuRef}>
+              {/* تطبيق الجوال: رابط بدل إرسال ملف في واتساب مع كل إصدار.
+                  الصفحة نفسها تعرف إن كان الملف مرفوعًا أو لا. */}
+              <a
+                className="btn btn-ghost btn-sm no-print"
+                href="/app"
+                target="_blank"
+                rel="noreferrer"
+                title="تنزيل تطبيق الجوال"
+              >
+                <Icon name="download" size={15} />
+                <span className="only-desktop">تطبيق الجوال</span>
+              </a>
+
               {me.farms?.length > 1 && (
                 <div className="menu-anchor">
                   <button

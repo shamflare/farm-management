@@ -33,6 +33,17 @@ www.{$DOMAIN} {
 		reverse_proxy api:8000
 	}
 
+	# صفحة تنزيل التطبيق وملف الـ APK — ملفات ثابتة يخدمها البوّاب نفسه،
+	# فلا تمرّ بلوحة الإدارة ولا بالخادم.
+	handle /app* {
+		root * /srv/app
+		# أندرويد يرفض تثبيت ملف لا يصل بنوعه الصحيح.
+		header /*.apk Content-Type application/vnd.android.package-archive
+		header /*.apk Content-Disposition "attachment; filename=zadfarm.apk"
+		uri strip_prefix /app
+		file_server browse
+	}
+
 	# وكل ما عداه لوحة الإدارة.
 	handle {
 		reverse_proxy web:3000

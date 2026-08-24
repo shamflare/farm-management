@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>تطبيق زاد — تنزيل</title>
+    <meta name="description" content="تطبيق مزرعة زاد لأندرويد: القطيع والتسجيل السريع في الميدان" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --green: #166534;
+        --green-deep: #0f2a1d;
+        --surface: #ffffff;
+        --text: #0f172a;
+        --muted: #5b6b7c;
+        --border: #e4e9e6;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --surface: #141c18;
+          --text: #ecf2ee;
+          --muted: #9aaaa1;
+          --border: #243029;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Cairo", "Segoe UI", system-ui, sans-serif;
+        color: var(--text);
+        background: linear-gradient(160deg, var(--green-deep) 0%, var(--green) 46%, transparent 46%),
+          radial-gradient(circle at 50% 0%, rgba(22, 101, 52, 0.12), transparent 60%);
+        background-color: color-mix(in srgb, var(--surface) 92%, #000);
+        display: flex;
+        justify-content: center;
+        padding: 24px 18px 60px;
+      }
+
+      .wrap {
+        width: 100%;
+        max-width: 460px;
+      }
+
+      .brand {
+        text-align: center;
+        color: #fff;
+        padding: 22px 0 30px;
+      }
+
+      .mark {
+        width: 84px;
+        height: 84px;
+        margin: 0 auto 16px;
+        border-radius: 28px;
+        background: rgba(255, 255, 255, 0.14);
+        display: grid;
+        place-items: center;
+        font-size: 42px;
+      }
+
+      .brand h1 {
+        margin: 0;
+        font-size: 1.6rem;
+      }
+
+      .brand p {
+        margin: 6px 0 0;
+        opacity: 0.85;
+        font-size: 0.92rem;
+      }
+
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 22px;
+        padding: 22px;
+        box-shadow: 0 18px 40px rgba(11, 18, 15, 0.16);
+        margin-bottom: 16px;
+      }
+
+      .cta {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        width: 100%;
+        min-height: 56px;
+        border-radius: 16px;
+        background: var(--green);
+        color: #fff;
+        font: inherit;
+        font-weight: 700;
+        font-size: 1.05rem;
+        text-decoration: none;
+        border: none;
+        cursor: pointer;
+        transition: transform 0.15s ease, filter 0.15s ease;
+      }
+
+      .cta:hover {
+        filter: brightness(1.08);
+      }
+
+      .cta:active {
+        transform: scale(0.99);
+      }
+
+      .meta {
+        display: flex;
+        justify-content: center;
+        gap: 14px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+
+      h2 {
+        font-size: 1rem;
+        margin: 0 0 14px;
+      }
+
+      ol,
+      ul {
+        margin: 0;
+        padding-inline-start: 20px;
+        color: var(--muted);
+        font-size: 0.9rem;
+        line-height: 2;
+      }
+
+      ol strong,
+      ul strong {
+        color: var(--text);
+      }
+
+      .features {
+        list-style: none;
+        padding: 0;
+        display: grid;
+        gap: 10px;
+      }
+
+      .features li {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+      }
+
+      .features span:first-child {
+        font-size: 1.1rem;
+      }
+
+      .note {
+        background: color-mix(in srgb, var(--green) 8%, transparent);
+        border: 1px solid color-mix(in srgb, var(--green) 22%, transparent);
+        border-radius: 14px;
+        padding: 12px 14px;
+        font-size: 0.85rem;
+        color: var(--muted);
+        line-height: 1.9;
+      }
+
+      .foot {
+        text-align: center;
+        color: var(--muted);
+        font-size: 0.78rem;
+        margin-top: 22px;
+      }
+
+      .foot a {
+        color: var(--green);
+      }
+
+      .unavailable {
+        display: none;
+        text-align: center;
+        color: var(--muted);
+        font-size: 0.88rem;
+        line-height: 2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="brand">
+        <div class="mark">🐑</div>
+        <h1>تطبيق زاد</h1>
+        <p>القطيع والتسجيل السريع، في جيبك</p>
+      </div>
+
+      <div class="card">
+        <a class="cta" id="download" href="zadfarm.apk" download>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3v12" />
+            <path d="m7 11 5 5 5-5" />
+            <path d="M4 20h16" />
+          </svg>
+          تنزيل التطبيق
+        </a>
+        <div class="meta" id="meta"></div>
+        <p class="unavailable" id="unavailable">
+          لم يُرفع ملف التطبيق بعد.<br />افتح اللوحة من المتصفح إلى أن يجهز.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>خطوات التثبيت</h2>
+        <ol>
+          <li>نزّل الملف من الزر أعلاه <strong>من جوالك</strong>.</li>
+          <li>افتح الملف بعد التنزيل.</li>
+          <li>
+            سيسألك أندرويد عن <strong>السماح بالتثبيت من هذا المصدر</strong> — وافق مرة
+            واحدة (التطبيق ليس على متجر جوجل عمدًا).
+          </li>
+          <li>ادخل بنفس اسم المستخدم وكلمة المرور اللذين تدخل بهما اللوحة.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h2>ماذا يفعل التطبيق</h2>
+        <ul class="features">
+          <li><span>📊</span><span>أرقام مزرعتك اليوم: النقد، الربح، القطيع، الحليب</span></li>
+          <li><span>🐑</span><span>قطيعك ببطاقات — بلا جداول ولا سحب يمينًا ويسارًا</span></li>
+          <li><span>⚡</span><span>تسجيل سريع في الحظيرة: مصروف، إيراد، حليب اليوم</span></li>
+          <li><span>🎨</span><span>يأخذ ألوان مزرعتك وخطها من الإعدادات تلقائيًا</span></li>
+        </ul>
+      </div>
+
+      <div class="note">
+        التطبيق نافذة ميدانية: الإعدادات والصلاحيات والتقارير التفصيلية تبقى على اللوحة،
+        لأنها تُدار على شاشة كبيرة لا على جوال.
+      </div>
+
+      <p class="foot">
+        <a href="/">← العودة إلى لوحة الإدارة</a>
+      </p>
+    </div>
+
+    <script>
+      // بيانات النسخة يكتبها سكربت النشر مع كل رفع، فالصفحة لا تحتاج تعديلًا.
+      fetch("version.json", { cache: "no-store" })
+        .then(function (response) {
+          if (!response.ok) throw new Error("no version");
+          return response.json();
+        })
+        .then(function (info) {
+          var parts = [];
+          if (info.version) parts.push("الإصدار " + info.version);
+          if (info.size) parts.push(info.size);
+          if (info.date) parts.push(info.date);
+          document.getElementById("meta").textContent = parts.join(" · ");
+        })
+        .catch(function () {
+          // لا ملف بعد: يُخفى الزر بدل أن يُنزّل المستخدم صفحة خطأ.
+          document.getElementById("download").style.display = "none";
+          document.getElementById("unavailable").style.display = "block";
+        });
+    </script>
+  </body>
+</html>

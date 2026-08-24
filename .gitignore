@@ -14,3 +14,5 @@ out/
 .DS_Store
 deploy/.env
 tsconfig.tsbuildinfo
+*.apk
+deploy/public/app/version.json
