@@ -121,7 +121,7 @@ const SECTIONS: Section[] = [
     icon: "🥛",
     tone: "limit",
     lead: "مسموحة قليلة الدسم",
-    items: [{ name: "اللبن والجبنة قليلة الدسم", amount: "نصف شبر في اليوم" }],
+    items: [{ name: "اللبن والجبنة قليلة الدسم", amount: "نصف شبع في اليوم" }],
   },
   {
     key: "cooking",
@@ -187,6 +187,12 @@ export default function LizaPage() {
         <div className="liza-signature">
           <p className="liza-doctor">الدكتورة ليزا حسن عبدالله</p>
           <p className="liza-title">أخصائية الغدد الصمّاء والسكري والاستقلاب</p>
+          {/* الرقم رابط يُتصل به من الجوال، ونصّ عادي حين يُطبع على ورق */}
+          <p className="liza-phone">
+            <a href="tel:+963998362652" dir="ltr">
+              +963 998 362 652
+            </a>
+          </p>
         </div>
         <p className="liza-foot-note">
           هذه الورقة إرشادية وتُكمّل تعليمات الطبيب ولا تحلّ محلّها. أي دواء أو جرعة

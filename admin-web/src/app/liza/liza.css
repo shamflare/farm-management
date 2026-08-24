@@ -248,6 +248,30 @@
   font-size: 0.94rem;
 }
 
+.liza-phone {
+  margin: 10px 0 0;
+  font-size: 1.02rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.liza-phone a {
+  color: var(--ink);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+}
+
+.liza-phone a::before {
+  content: "📞";
+  font-size: 0.9rem;
+}
+
 .liza-foot-note {
   margin: 14px auto 0;
   max-width: 60ch;
@@ -343,5 +367,17 @@
   .liza-foot {
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+
+  .liza-phone a {
+    border: none;
+    padding: 0;
+    color: #000 !important;
+    background: none;
+  }
+
+  .liza-phone a::before {
+    content: "هاتف: ";
+    font-size: inherit;
   }
 }
