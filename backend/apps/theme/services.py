@@ -155,28 +155,91 @@ def validate_logo_data(value):
     return value
 
 
+# ما يُنسخ من المنشور إلى المسودة — كل ما يراه المستخدم على الشاشة.
+COPIED_FIELDS = (
+    "brand_name",
+    "brand_tagline",
+    "logo_data",
+    "colors",
+    "font_family",
+    "font_scale",
+    "corner_radius",
+    "density",
+    "dark_mode_enabled",
+    "sidebar",
+    "dashboard_widgets",
+)
+
+
+def copy_into_draft(draft, published):
+    """يجعل المسودة نسخة مما هو منشور الآن."""
+    for field in COPIED_FIELDS:
+        setattr(draft, field, getattr(published, field))
+    draft.version = published.version
+    draft.save()
+    return draft
+
+
 def get_draft(farm):
+    """المسودة التي تُفتح عليها شاشة الهوية.
+
+    القاعدة: تُفتح على ما هو منشور فعلًا، لا على ما تركه أحدهم في مسودة
+    منسية. مسودة قديمة تبقى حيّة إلى الأبد فخّ: تُعدَّل الألوان من جهاز
+    وتُنشر، ثم تُفتح الشاشة على جهاز آخر فيرى مسودته القديمة، فيغيّر لونًا
+    واحدًا وينشر — فيمحو بها كل ما نُشر بينهما.
+
+    فإن كانت المسودة لم تُمسّ منذ آخر نشر، تُحدَّث منه. وإن كانت تحمل تعديلات
+    أحدث من النشر فهي عمل لم يُنشر بعد، ولا يجوز محوه — والشاشة تقول للمستخدم
+    إنها تختلف عمّا هو منشور، وتعطيه زر العودة.
+    """
     theme = Theme.objects.filter(farm=farm, status=ThemeStatus.DRAFT).first()
-    if theme is not None:
-        return theme
     published = get_published(farm)
-    if published is not None:
-        return Theme.objects.create(
-            farm=farm,
-            status=ThemeStatus.DRAFT,
-            version=published.version,
-            brand_name=published.brand_name,
-            brand_tagline=published.brand_tagline,
-            colors=published.colors,
-            font_family=published.font_family,
-            font_scale=published.font_scale,
-            corner_radius=published.corner_radius,
-            density=published.density,
-            dark_mode_enabled=published.dark_mode_enabled,
-            sidebar=published.sidebar,
-            dashboard_widgets=published.dashboard_widgets,
+
+    if theme is not None:
+        stale = (
+            published is not None
+            and published.published_at is not None
+            and theme.updated_at <= published.published_at
         )
+        return copy_into_draft(theme, published) if stale else theme
+
+    if published is not None:
+        draft = Theme.objects.create(farm=farm, status=ThemeStatus.DRAFT, version=published.version)
+        return copy_into_draft(draft, published)
+
     return create_default(farm, status=ThemeStatus.DRAFT)
+
+
+@transaction.atomic
+def revert_draft(farm, actor=None):
+    """يُعيد المسودة إلى ما هو منشور — طريق الخروج من تعديل نُدم عليه."""
+    published = get_published(farm)
+    if published is None:
+        return reset_to_default(farm, actor=actor)
+
+    draft = Theme.objects.filter(farm=farm, status=ThemeStatus.DRAFT).first()
+    if draft is None:
+        draft = Theme.objects.create(farm=farm, status=ThemeStatus.DRAFT, version=published.version)
+    copy_into_draft(draft, published)
+
+    record(
+        AuditAction.SETTING,
+        "theme",
+        draft.id,
+        farm=farm,
+        label="أُعيدت المسودة إلى السمة المنشورة",
+        user=actor,
+    )
+    return draft
+
+
+def draft_differs(farm):
+    """هل تختلف المسودة عمّا يراه المستخدمون الآن؟"""
+    draft = Theme.objects.filter(farm=farm, status=ThemeStatus.DRAFT).first()
+    published = get_published(farm)
+    if draft is None or published is None:
+        return False
+    return any(getattr(draft, field) != getattr(published, field) for field in COPIED_FIELDS)
 
 
 def get_published(farm):

@@ -158,7 +158,7 @@ export default function UsersPage() {
               <th>الاسم</th>
               <th>اسم المستخدم</th>
               <th>الدور</th>
-              <th>مرتبط بسجل</th>
+              <th>ملفه في الحسابات</th>
               <th>الحالة</th>
               <th className="cell-actions" />
             </tr>
@@ -213,7 +213,7 @@ export default function UsersPage() {
                         value={member.party?.id ?? ""}
                         onChange={(e) => linkParty(member, e.target.value)}
                       >
-                        <option value="">— غير مرتبط —</option>
+                        <option value="">— لا ملف —</option>
                         {member.party && (
                           <option value={member.party.id}>
                             {member.party.name} ({KIND_LABEL[member.party.kind]})
@@ -268,8 +268,12 @@ export default function UsersPage() {
       <div className="alert alert-info mt-4 no-print">
         <Icon name="info" />
         <span>
-          الربط بسجل شخص يجعل الاسم في قائمة العاملين هو نفسه صاحب حساب الدخول: ما يدفعه من جيبه
-          يظهر في حسابه، وما يسجّله يظهر باسمه في سجل التدقيق.
+          <strong>«ملفه في الحسابات»</strong> يعني: هل هذا الحساب لشخص له سجل مالي في المزرعة؟
+          خالد الذي يدخل النظام، وخالد الذي في قائمة العاملين وله مستحقات — شخص واحد أم اثنان؟
+          <br />
+          حين تربطهما يصيران واحدًا: ما يدفعه من جيبه يُسجَّل في حسابه، وما يسجّله في النظام يظهر
+          باسمه، ورصيده يُقرأ من مكان واحد. أما من يستعمل النظام ولا مال له فيه — محاسب أو مشرف —
+          فيبقى بلا ملف، وهذا صحيح لا نقص.
         </span>
       </div>
     </>

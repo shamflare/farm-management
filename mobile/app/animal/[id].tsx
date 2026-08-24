@@ -11,6 +11,7 @@ import { alpha } from "../../src/theme/tokens";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { Body, Header, Screen, Section } from "../../src/ui/layout";
 import { Field, Note, Picker } from "../../src/ui/forms";
+import { Select } from "../../src/ui/Select";
 import { Badge, Button, Card, CardSkeleton, Empty, T } from "../../src/ui/primitives";
 
 type Action = "edit" | "weight" | "health" | "birth" | "death" | null;
@@ -305,7 +306,7 @@ export default function AnimalScreen() {
                       value={form.name ?? ""}
                       onChangeText={(value) => set("name", value)}
                     />
-                    <Picker
+                    <Select
                       label="النوع"
                       value={form.animal_type ?? ""}
                       onChange={(value) => set("animal_type", value)}
@@ -454,7 +455,7 @@ export default function AnimalScreen() {
 
                 {action === "death" && (
                   <>
-                    <Picker
+                    <Select
                       label="السبب"
                       value={form.reason ?? ""}
                       onChange={(value) => set("reason", value)}

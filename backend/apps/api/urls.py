@@ -68,6 +68,7 @@ urlpatterns = [
     path("theme/", core.ThemeView.as_view(), name="theme"),
     path("theme/draft/", core.ThemeDraftView.as_view(), name="theme-draft"),
     path("theme/publish/", core.ThemePublishView.as_view(), name="theme-publish"),
+    path("theme/revert/", core.ThemeRevertView.as_view(), name="theme-revert"),
     path("theme/reset/", core.ThemeResetView.as_view(), name="theme-reset"),
 
     path("ops/expense/", finance.ExpenseCommandView.as_view(), name="op-expense"),

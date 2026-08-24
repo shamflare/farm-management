@@ -9,7 +9,8 @@ import { money, today } from "../../src/lib/format";
 import { recall, recallFrom, remember } from "../../src/lib/recall";
 import { alpha } from "../../src/theme/tokens";
 import { useTheme } from "../../src/theme/ThemeProvider";
-import { Field, Note, Picker } from "../../src/ui/forms";
+import { Field, Note } from "../../src/ui/forms";
+import { Select } from "../../src/ui/Select";
 import { Body, Header, Screen } from "../../src/ui/layout";
 import { Button, Card, T } from "../../src/ui/primitives";
 import { Toast } from "../../src/ui/Toast";
@@ -253,35 +254,35 @@ export default function RecordScreen() {
           {(kind === "expense" || kind === "income") && (
             <>
               {categories.length > 0 && (
-                <Picker
+                <Select
                   label="البند"
                   value={category}
                   onChange={setCategory}
+                  placeholder="بلا بند"
                   options={[
                     { id: "", display_name: "بلا بند" },
                     ...categories.map((item) => ({ id: item.id, display_name: item.display_name })),
                   ]}
                 />
               )}
-              {cashAccounts.length > 1 && (
-                <Picker
-                  label={kind === "income" ? "إلى أين دخل؟" : "من أي صندوق؟"}
-                  value={account}
-                  onChange={setAccount}
-                  options={cashAccounts.map((item) => ({
-                    id: item.id,
-                    display_name: item.display_name,
-                  }))}
-                />
-              )}
+              <Select
+                label={kind === "income" ? "إلى أين دخل؟" : "من أي صندوق؟"}
+                value={account}
+                onChange={setAccount}
+                options={cashAccounts.map((item) => ({
+                  id: item.id,
+                  display_name: item.display_name,
+                }))}
+              />
             </>
           )}
 
           {kind !== "weight" && branches.length > 0 && (
-            <Picker
+            <Select
               label="الفرع"
               value={branch}
               onChange={setBranch}
+              placeholder="المزرعة كلها"
               options={
                 kind === "milk"
                   ? branches.map((item) => ({ id: item.id, display_name: item.display_name }))

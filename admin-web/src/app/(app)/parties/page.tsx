@@ -209,6 +209,15 @@ ${reasons.join("  ·  ")}
       <ErrorNote message={error} />
       <SuccessNote message={notice} />
 
+      <div className="alert alert-info no-print">
+        <Icon name="info" />
+        <span>
+          <strong>رأس المال والمسحوبات</strong> من هنا: افتح قائمة الإجراءات (⋮) بجانب الشريك، ثم
+          «إيداع رأس مال» أو «سحب من رأس المال». وما كان موجودًا يوم بدأت المزرعة يُسجَّل مرة واحدة
+          من <a className="link" href="/settings/opening">الرصيد الافتتاحي</a>.
+        </span>
+      </div>
+
       {showForm && (
         <PartyForm
           initial={editing}
@@ -247,7 +256,7 @@ ${reasons.join("  ·  ")}
               colSpan={8}
               empty={rows.length === 0}
               emptyTitle="لا توجد سجلات"
-              emptyText="أضف الشركاء والعاملين والموردين والزبائن؛ لكل واحد منهم حساب حقيقي في الدفتر."
+              emptyText="أضف الشركاء والعاملين والموردين والزبائن؛ لكل واحد منهم حساب حقيقي في الدفتر. ولإيداع رأس مال: أضف الشريك هنا ثم افتح قائمة إجراءاته."
             />
             {rows.map((party) => {
               const s = party.summary;

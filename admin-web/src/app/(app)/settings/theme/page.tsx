@@ -73,16 +73,21 @@ export default function ThemePage() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [fonts, setFonts] = useState<Font[]>([]);
   const [problems, setProblems] = useState<Problem[]>([]);
+  const [differs, setDiffers] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function load() {
-    const data = await api.get<{ draft: Draft; problems: Problem[]; fonts: Font[] }>(
-      "/theme/draft/"
-    );
+    const data = await api.get<{
+      draft: Draft;
+      problems: Problem[];
+      fonts: Font[];
+      differs_from_published?: boolean;
+    }>("/theme/draft/");
     setDraft(data.draft);
     setProblems(data.problems);
+    setDiffers(!!data.differs_from_published);
     setFonts(data.fonts ?? []);
     // هذه الشاشة وحدها تعرض كل الخطوط جنبًا إلى جنب، فتحتاجها كلها محمّلة
     // لتكون المعاينة صادقة. بقية الشاشات تحمّل الخط المختار فقط.
@@ -139,6 +144,7 @@ export default function ThemePage() {
       );
       setDraft(res.draft);
       setProblems(res.problems);
+      setDiffers(!!(res as any).differs_from_published);
       if (res.fonts?.length) setFonts(res.fonts);
       setNotice(res.problems.length ? "حُفظت المسودة، لكن هناك ملاحظات قبل النشر" : "حُفظت المسودة");
     } catch (err: any) {
@@ -169,11 +175,32 @@ export default function ThemePage() {
     }
   }
 
+  /** يُلغي ما لم يُنشر ويعود إلى ما يراه المستخدمون الآن. */
+  async function revertToPublished() {
+    setBusy(true);
+    setError("");
+    try {
+      await api.post("/theme/revert/");
+      await load();
+      await reloadTheme();
+      setNotice("عادت الشاشة إلى الألوان المنشورة");
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function reset() {
-    if (!window.confirm("إعادة التصميم إلى الإعدادات الافتراضية؟")) return;
+    if (
+      !window.confirm(
+        "إعادة كل شيء إلى ألوان النظام الافتراضية — وليس إلى ألوان مزرعتك المنشورة.\n\nللعودة إلى ألوانك المنشورة استعمل «استعادة المنشور».\n\nهل تريد المتابعة؟"
+      )
+    )
+      return;
     await api.post("/theme/reset/");
     await load();
-    setNotice("تمت الإعادة للإعدادات الافتراضية");
+    setNotice("تمت الإعادة للإعدادات الافتراضية — لم يُنشر شيء بعد");
   }
 
   if (error && !draft) return <ErrorNote message={error} />;
@@ -191,6 +218,9 @@ export default function ThemePage() {
       >
         {!readOnly && (
           <>
+            <Button variant="ghost" icon="history" onClick={revertToPublished} disabled={busy}>
+              استعادة المنشور
+            </Button>
             <Button variant="ghost" icon="refresh" onClick={reset} disabled={busy}>
               استعادة الافتراضي
             </Button>
@@ -206,6 +236,17 @@ export default function ThemePage() {
 
       <ErrorNote message={error} />
       <SuccessNote message={notice} />
+
+      {/* ما على الشاشة ليس ما يراه الناس: يُقال صراحةً، ويُعطى طريق للعودة */}
+      {differs && !readOnly && (
+        <div className="alert alert-warning no-print">
+          <Icon name="warning" />
+          <span style={{ flex: 1 }}>
+            هذه مسودة لم تُنشر — ما يراه المستخدمون الآن مختلف عمّا أمامك. اضغط
+            «نشر» لتعتمدها، أو «استعادة المنشور» لتعود إلى الألوان الحالية.
+          </span>
+        </div>
+      )}
       {problems.length > 0 && (
         <div className="alert alert-warning">
           <Icon name="warning" />

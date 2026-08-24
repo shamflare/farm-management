@@ -2066,6 +2066,20 @@ select.input {
   animation: toast-in 0.22s var(--ease);
 }
 
+/*
+ * الأيقونة بلا مقاس داخل صندوق مرن تتمدّد بلا حدّ.
+ * ظهرت دائرة خضراء تملأ الشاشة وتزيح النص تحتها — أيقونة صحّ بحجم الصفحة.
+ */
+.toast > svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.toast > span {
+  min-width: 0;
+}
+
 @keyframes toast-in {
   from {
     opacity: 0;

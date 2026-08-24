@@ -519,6 +519,8 @@ class ThemeDraftView(APIView):
                 "draft": ThemeSerializer(draft).data,
                 "problems": theme_services.validate_theme(draft),
                 "fonts": self._fonts(),
+                # تقول الشاشة للمستخدم إن ما أمامه ليس ما يراه الناس الآن.
+                "differs_from_published": theme_services.draft_differs(farm),
             }
         )
 
@@ -533,8 +535,27 @@ class ThemeDraftView(APIView):
                 "draft": ThemeSerializer(draft).data,
                 "problems": problems,
                 "fonts": self._fonts(),
+                "differs_from_published": theme_services.draft_differs(farm),
             },
             status=status.HTTP_200_OK,
+        )
+
+
+class ThemeRevertView(APIView):
+    """يُعيد المسودة إلى ما هو منشور — بلا لمس ما يراه المستخدمون."""
+
+    permission_classes = [FarmPermission]
+    required_permissions = {"default": "theme.edit"}
+
+    def post(self, request):
+        farm = resolve_farm(request)
+        draft = theme_services.revert_draft(farm, actor=request.user)
+        return Response(
+            {
+                "draft": ThemeSerializer(draft).data,
+                "problems": theme_services.validate_theme(draft),
+                "differs_from_published": False,
+            }
         )
 
 
