@@ -90,6 +90,17 @@ class PurchaseCorrectionTests(TestCase):
         self.purchase.refresh_from_db()
         self.assertEqual(self.purchase.paid_amount, paid_before)
 
+    def test_a_correction_that_changes_nothing_leaves_the_ledger_alone(self):
+        """فتح شاشة التصحيح وإغلاقها بلا تعديل لا يجوز أن يكتب قيدين."""
+        entry_before = self.purchase.journal_entry_id
+        entries_before = JournalEntry.objects.count()
+
+        ops.correct_purchase(self.purchase, actor=self.owner)
+
+        self.purchase.refresh_from_db()
+        self.assertEqual(self.purchase.journal_entry_id, entry_before)
+        self.assertEqual(JournalEntry.objects.count(), entries_before)
+
     def test_the_api_corrects_a_deal(self):
         client = APIClient()
         client.force_authenticate(user=self.owner)

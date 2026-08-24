@@ -669,6 +669,31 @@ def correct_purchase(
     new_supplier = purchase.supplier if supplier is UNSET else supplier
     account = purchase.paid_from_account if from_account is UNSET else from_account
 
+    # تصحيح لا يغيّر شيئًا لا يُحرّك الدفتر: عكسٌ وقيدٌ جديدان بالأرقام نفسها
+    # يملآن التاريخ بضجيج ويجعلان قارئه يبحث عن فرق لا وجود له.
+    unchanged = (
+        date == purchase.happened_on
+        and animals_price == to_money(purchase.animals_price)
+        and transport == to_money(purchase.transport_cost)
+        and commission == to_money(purchase.commission_cost)
+        and other == to_money(purchase.other_cost)
+        and paid == to_money(purchase.paid_amount)
+        and (new_supplier.id if new_supplier else None)
+        == (purchase.supplier.id if purchase.supplier_id else None)
+    )
+    if unchanged:
+        # النص والمرجع لا يمسّان القيد، فيُحفظان وحدهما إن ذُكرا.
+        fields = []
+        if reference is not None and reference != purchase.reference:
+            purchase.reference = reference
+            fields.append("reference")
+        if notes is not None and notes != purchase.notes:
+            purchase.notes = notes
+            fields.append("notes")
+        if fields:
+            purchase.save(update_fields=fields + ["updated_at"])
+        return purchase
+
     # القيد القديم يُعكس أولًا: لا يُكتب الجديد قبل أن يُلغى الأول، وإلا حُسب
     # المبلغ مرتين للحظة بين الاثنين.
     old_entry = purchase.journal_entry
