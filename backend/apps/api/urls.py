@@ -23,7 +23,10 @@ router.register("audit", core.AuditLogViewSet, basename="audit")
 router.register("animals", animals.AnimalViewSet, basename="animal")
 router.register("births", animals.BirthViewSet, basename="birth")
 router.register("weights", animals.WeightViewSet, basename="weight")
-router.register("health", animals.HealthViewSet, basename="health")
+# ليس "health": ذاك المسار محجوز لفحص صحة الخدمة أدناه، وهو مُسجَّل قبل
+# المُوجّه فيبتلع كل نداء له. النتيجة كانت أن طلب السجلات الصحية لحيوان يعود
+# بحالة الخدمة، فتنهار الشاشة على بيانات لا تشبه ما تنتظره.
+router.register("health-records", animals.HealthViewSet, basename="health-record")
 
 router.register("accounts", finance.AccountViewSet, basename="account")
 router.register("entries", finance.JournalEntryViewSet, basename="entry")

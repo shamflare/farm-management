@@ -7,6 +7,7 @@ import { api, formatDate, formatNumber, getCached, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
 import Attachments from "@/components/Attachments";
 import Icon, { IconName } from "@/components/Icon";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import {
   Button,
   EmptyState,
@@ -153,6 +154,12 @@ export default function AnimalDetailPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [parties, setParties] = useState<Party[]>([]);
   const [openForm, setOpenForm] = useState("");
+  // إخراج الحيوان من القطيع طريقان لا طريق: نفوق يُسجَّل خسارته في الدفتر،
+  // وحذف لسجل أُدخل بالخطأ ولا وجود له في الحظيرة أصلًا.
+  const [removing, setRemoving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
@@ -171,13 +178,17 @@ export default function AnimalDetailPage() {
     await Promise.all([
       getCached<Animal>(`/animals/${id}/`, (a) => setAnimal(a)),
       getCached<{ data: { events: Event[] } }>(`/animals/${id}/timeline/`, (t) =>
-        setEvents(t.data.events)
+        setEvents(t.data?.events ?? [])
       ),
       getCached<{ data: Cost }>(`/animals/${id}/cost/`, (c) => setCost(c.data)),
       getCached<{ data: Tree }>(`/animals/${id}/family-tree/`, (f) => setTree(f.data)),
       getCached<{ data: any }>(`/animals/${id}/productivity/`, (pr) => setProductivity(pr.data)),
-      getCached<Page<Health>>(`/health/?animal=${id}&page_size=50`, (h) => setHealth(h.results)),
-      getCached<Page<Weight>>(`/weights/?animal=${id}&page_size=50`, (w) => setWeights(w.results)),
+      getCached<Page<Health>>(`/health-records/?animal=${id}&page_size=50`, (h) =>
+        setHealth(h.results ?? [])
+      ),
+      getCached<Page<Weight>>(`/weights/?animal=${id}&page_size=50`, (w) =>
+        setWeights(w.results ?? [])
+      ),
     ]);
   }
 
@@ -249,6 +260,18 @@ export default function AnimalDetailPage() {
     },
   ];
 
+  async function removeAnimal(animalId: string) {
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await api.delete(`/animals/${animalId}/`);
+      router.replace("/animals");
+    } catch (err: any) {
+      setDeleteError(err.message);
+      setDeleting(false);
+    }
+  }
+
   const actions = allActions.filter((action) => action.when && can(action.permission));
 
   return (
@@ -290,8 +313,20 @@ export default function AnimalDetailPage() {
             </p>
           </div>
         </div>
-        <span className={`badge ${animal.is_on_farm ? "badge-success" : "badge-muted"}`}>
-          {animal.status_name}
+        <span className="inline" style={{ gap: "var(--s3)" }}>
+          <span className={`badge ${animal.is_on_farm ? "badge-success" : "badge-muted"}`}>
+            {animal.status_name}
+          </span>
+          {(can("animals.delete") || can("finance.create")) && (
+            <button
+              className="btn btn-ghost btn-sm no-print"
+              onClick={() => setRemoving((open) => !open)}
+              title="إخراج هذا الحيوان من القطيع"
+            >
+              <Icon name="trash" size={15} />
+              إخراج من القطيع
+            </button>
+          )}
         </span>
       </div>
 
@@ -302,6 +337,83 @@ export default function AnimalDetailPage() {
           value={openForm}
           onChange={(key) => setOpenForm(openForm === key ? "" : key)}
           options={actions}
+        />
+      )}
+
+      {removing && (
+        <div className="card mb-4">
+          <div className="card-title">
+            <span className="inline">
+              <Icon name="trash" size={17} className="muted" />
+              إخراج {animal.tag} من القطيع
+            </span>
+            <button className="btn btn-ghost btn-sm" onClick={() => setRemoving(false)}>
+              <Icon name="close" size={15} />
+              إغلاق
+            </button>
+          </div>
+          <p className="muted" style={{ marginTop: 0 }}>
+            ما الذي جرى فعلًا؟ الفرق ليس في الشكل: الأول واقعة تُسجَّل في الدفتر، والثاني
+            تصحيح لسجل لا يقابله حيوان.
+          </p>
+          <div className="grid grid-2">
+            <button
+              className="card"
+              style={{ textAlign: "start", cursor: "pointer" }}
+              onClick={() => {
+                setRemoving(false);
+                setOpenForm("death");
+              }}
+              disabled={!animal.is_alive || !can("finance.create")}
+            >
+              <div className="inline" style={{ gap: "var(--s3)" }}>
+                <Icon name="warning" className="tone-warning" />
+                <span className="strong">نفق الحيوان</span>
+              </div>
+              <p className="stat-hint" style={{ marginBottom: 0 }}>
+                يبقى في السجل والنسب، وتُسجَّل قيمته خسارةً في الدفتر. هذا ما حدث فعلًا،
+                فيُروى كما حدث.
+              </p>
+            </button>
+
+            <button
+              className="card"
+              style={{ textAlign: "start", cursor: "pointer" }}
+              onClick={() => {
+                setRemoving(false);
+                setConfirmDelete(true);
+              }}
+              disabled={!can("animals.delete")}
+            >
+              <div className="inline" style={{ gap: "var(--s3)" }}>
+                <Icon name="trash" className="tone-danger" />
+                <span className="strong">حذف السجل</span>
+              </div>
+              <p className="stat-hint" style={{ marginBottom: 0 }}>
+                لسجل أُدخل بالخطأ أو تكرّر. يختفي من كل الشاشات، ولا يُسجَّل شيء في الدفتر
+                لأنه لم يكن هناك حيوان.
+              </p>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {confirmDelete && (
+        <ConfirmDialog
+          title={`حذف ${animal.tag}`}
+          message="سيختفي هذا الحيوان من القوائم والتقارير والنسب."
+          consequences={[
+            "لن يظهر في قائمة الحيوانات ولا في تقرير القطيع",
+            "ما سُجّل عليه من أوزان ولقاحات يذهب معه",
+            ...(animal.purchase
+              ? ["قيد الشراء يبقى في الدفتر — المال صُرف فعلًا ولا يُمحى بحذف سجل"]
+              : []),
+          ]}
+          confirmLabel="نعم، احذف السجل"
+          busy={deleting}
+          error={deleteError}
+          onCancel={() => setConfirmDelete(false)}
+          onConfirm={() => removeAnimal(animal.id)}
         />
       )}
 

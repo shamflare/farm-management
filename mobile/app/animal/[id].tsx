@@ -56,7 +56,7 @@ export default function AnimalScreen() {
         setNote(`سُجّل وزن ${value} كغ`);
       } else if (action === "health") {
         if (!form.title?.trim()) throw new Error("اكتب اسم اللقاح أو العلاج");
-        await api.post("/health/", {
+        await api.post("/health-records/", {
           animal: id,
           happened_on: today(),
           title: form.title.trim(),

@@ -49,6 +49,29 @@ def _create_party_account(farm, party, slot, account_type, suffix_ar, currency):
 
 
 @transaction.atomic
+def party_by_name(farm, kind, name):
+    """يجد الشخص بهذا الاسم أو يُنشئه — بلا أن يتكرّر اسم مرتين.
+
+    البيع يحدث في السوق، والزبون يُعرف باسمه لا برقمه: إجبار البائع على
+    اختيار الزبون من قائمة يعني أن يفتح شاشة أخرى ليُنشئه أولًا، فيؤجّل
+    التسجيل. هنا يُكتب الاسم، ويُنشأ سجلّه بحساباته إن كان جديدًا.
+
+    المطابقة تتجاهل حالة الأحرف والمسافات الزائدة: «محمد العلي» و«محمد
+    العلي » شخص واحد، وسجلّان باسم واحد يعنيان رصيدين لرجل واحد.
+    """
+    cleaned = " ".join((name or "").split())
+    if not cleaned:
+        return None
+
+    existing = Party.objects.filter(farm=farm, kind=kind, name__iexact=cleaned).first()
+    if existing is not None:
+        return existing
+
+    # المستخدم الحالي يُسجَّل تلقائيًا في created_by، فلا يُمرَّر هنا.
+    return create_party(farm, kind=kind, name=cleaned)
+
+
+@transaction.atomic
 def ensure_party_accounts(party, currency=None):
     """Create the ledger accounts a party needs for its kind. Idempotent."""
     farm = party.farm

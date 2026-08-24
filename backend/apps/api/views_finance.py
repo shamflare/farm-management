@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from django.db.models import Q
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -14,6 +15,7 @@ from apps.animals.services import create_animal
 from apps.api.mixins import CommandView, FarmScopedViewSet, as_api_error, ok, pick
 from apps.api.permissions import FarmPermission, confirm_password, require, resolve_farm
 from apps.api.serializers import (
+    PurchaseCorrectionSerializer,
     AccountSerializer,
     AnimalPurchaseSerializer,
     AnimalSaleSerializer,
@@ -40,10 +42,12 @@ from apps.ledger.models import (
     JournalEntry,
 )
 from apps.operations import services as ops
+from apps.operations.services import UNSET
 from apps.operations.models import AnimalPurchase, AnimalSale
 from apps.parties.models import Party, PartyKind
 from apps.parties.services import (
     ensure_party_accounts,
+    party_by_name,
     party_statement,
     party_summary,
     set_ownership,
@@ -403,14 +407,61 @@ class PurchaseViewSet(FarmScopedViewSet):
     serializer_class = AnimalPurchaseSerializer
     filterset_fields = ["supplier", "settlement_status", "happened_on"]
     ordering_fields = ["happened_on", "total_cost"]
-    http_method_names = ["get", "post", "head", "options"]
+    http_method_names = ["get", "post", "patch", "head", "options"]
     required_permissions = {
         "list": "purchases.view",
         "retrieve": "purchases.view",
         "create": "purchases.create",
+        "partial_update": "purchases.edit",
         "default": "purchases.view",
     }
 
+    def partial_update(self, request, *args, **kwargs):
+        """تصحيح أرقام صفقة سُجّلت بقيم خاطئة.
+
+        لا يُعدَّل القيد القديم: يُعكس ويُكتب قيد صحيح مكانه، فتبقى الحادثة
+        كلها مقروءة في الدفتر — ما سُجّل، وما أُلغي، وما صار.
+        """
+        purchase = self.get_object()
+        payload = PurchaseCorrectionSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        data = payload.validated_data
+        farm = self.farm
+
+        supplier = UNSET
+        if "supplier" in data or data.get("supplier_name"):
+            supplier = pick(Party, farm, data.get("supplier"), "supplier") or party_by_name(
+                farm, PartyKind.SUPPLIER, data.get("supplier_name")
+            )
+
+        from_account = UNSET
+        if "from_account" in data:
+            from_account = pick(Account, farm, data.get("from_account"), "from_account")
+
+        try:
+            ops.correct_purchase(
+                purchase,
+                date=data.get("date"),
+                prices={str(key): value for key, value in (data.get("prices") or {}).items()},
+                supplier=supplier,
+                transport_cost=data.get("transport_cost"),
+                commission_cost=data.get("commission_cost"),
+                other_cost=data.get("other_cost"),
+                paid_amount=data["paid_amount"] if "paid_amount" in data else UNSET,
+                from_account=from_account,
+                reference=data.get("reference"),
+                notes=data.get("notes"),
+                actor=request.user,
+            )
+        except DjangoValidationError as exc:
+            raise as_api_error(exc)
+
+        purchase.refresh_from_db()
+        return Response(AnimalPurchaseSerializer(purchase).data)
+
+    # الزبون أو البائع قد يُنشأ باسمه هنا، فإن فشل البيع بعده وجب أن
+    # يختفي معه: سجلّ شخص لا صفقة خلفه هو ضجيج في قائمة الأشخاص.
+    @transaction.atomic
     def create(self, request, *args, **kwargs):
         command = PurchaseCommandSerializer(data=request.data)
         command.is_valid(raise_exception=True)
@@ -446,7 +497,10 @@ class PurchaseViewSet(FarmScopedViewSet):
                 farm,
                 date=data["date"],
                 items=items,
-                supplier=pick(Party, farm, data.get("supplier"), "supplier"),
+                supplier=(
+                    pick(Party, farm, data.get("supplier"), "supplier")
+                    or party_by_name(farm, PartyKind.SUPPLIER, data.get("supplier_name"))
+                ),
                 transport_cost=data.get("transport_cost") or 0,
                 commission_cost=data.get("commission_cost") or 0,
                 other_cost=data.get("other_cost") or 0,
@@ -478,6 +532,9 @@ class SaleViewSet(FarmScopedViewSet):
         "default": "sales.view",
     }
 
+    # الزبون أو البائع قد يُنشأ باسمه هنا، فإن فشل البيع بعده وجب أن
+    # يختفي معه: سجلّ شخص لا صفقة خلفه هو ضجيج في قائمة الأشخاص.
+    @transaction.atomic
     def create(self, request, *args, **kwargs):
         command = SaleCommandSerializer(data=request.data)
         command.is_valid(raise_exception=True)
@@ -506,7 +563,10 @@ class SaleViewSet(FarmScopedViewSet):
                 farm,
                 date=data["date"],
                 items=items,
-                customer=pick(Party, farm, data.get("customer"), "customer"),
+                customer=(
+                    pick(Party, farm, data.get("customer"), "customer")
+                    or party_by_name(farm, PartyKind.CUSTOMER, data.get("customer_name"))
+                ),
                 transport_cost=data.get("transport_cost") or 0,
                 commission_cost=data.get("commission_cost") or 0,
                 received_amount=data.get("received_amount"),

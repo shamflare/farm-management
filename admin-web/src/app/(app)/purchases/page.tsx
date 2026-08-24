@@ -56,6 +56,7 @@ export default function PurchasesPage() {
   const [parties, setParties] = useState<Party[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [expanded, setExpanded] = useState("");
+  const [editing, setEditing] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
@@ -226,6 +227,33 @@ export default function PurchasesPage() {
                       </table>
                       <div style={{ padding: "var(--s4)" }}>
                         {row.notes && <p className="muted text-sm mb-4">{row.notes}</p>}
+
+                        {can("purchases.edit") && (
+                          <div className="mb-4">
+                            {editing === row.id ? (
+                              <CorrectionForm
+                                purchase={row}
+                                parties={parties}
+                                accounts={accounts}
+                                onCancel={() => setEditing("")}
+                                onDone={() => {
+                                  setEditing("");
+                                  setNotice("صُحّحت الصفقة — عُكس القيد القديم وكُتب الصحيح مكانه");
+                                  load();
+                                }}
+                              />
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                icon="edit"
+                                onClick={() => setEditing(row.id)}
+                              >
+                                تصحيح أرقام الصفقة
+                              </Button>
+                            )}
+                          </div>
+                        )}
                         {can("attachments.view") && (
                           <Attachments
                             subjectType="purchase"
@@ -541,6 +569,191 @@ function PurchaseForm({
       <div className="form-actions">
         <Button icon="check" busy={busy}>
           {busy ? "جارٍ الحفظ…" : "تسجيل الشراء"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+
+/**
+ * تصحيح أرقام صفقة قائمة.
+ *
+ * لا يُعدَّل القيد القديم في الدفتر: يُعكس بقيد مضاد ويُكتب قيد صحيح مكانه،
+ * فتبقى الحادثة كلها مقروءة — ما سُجّل، وما أُلغي، وما صار. الرؤوس نفسها
+ * تبقى؛ إضافة رأس أو إخراجه صفقة أخرى لا تصحيح لهذه.
+ */
+function CorrectionForm({
+  purchase,
+  parties,
+  accounts,
+  onCancel,
+  onDone,
+}: {
+  purchase: Purchase;
+  parties: Party[];
+  accounts: Account[];
+  onCancel: () => void;
+  onDone: () => void;
+}) {
+  const { currency } = useApp();
+  const [form, setForm] = useState({
+    date: purchase.happened_on,
+    supplier_name: purchase.supplier_name ?? "",
+    transport_cost: String(Number(purchase.transport_cost)),
+    commission_cost: String(Number(purchase.commission_cost)),
+    other_cost: String(Number(purchase.other_cost)),
+    paid_amount: String(Number(purchase.paid_amount)),
+  });
+  const [prices, setPrices] = useState<Record<string, string>>(
+    Object.fromEntries(purchase.items.map((item) => [item.id, String(Number(item.unit_price))]))
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const animalsPrice = Object.values(prices).reduce((sum, value) => sum + Number(value || 0), 0);
+  const total =
+    animalsPrice +
+    Number(form.transport_cost || 0) +
+    Number(form.commission_cost || 0) +
+    Number(form.other_cost || 0);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      await api.patch(`/purchases/${purchase.id}/`, {
+        date: form.date,
+        supplier_name: form.supplier_name.trim(),
+        prices,
+        transport_cost: form.transport_cost || 0,
+        commission_cost: form.commission_cost || 0,
+        other_cost: form.other_cost || 0,
+        paid_amount: form.paid_amount === "" ? null : form.paid_amount,
+      });
+      onDone();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="card" onSubmit={submit}>
+      <div className="card-title">
+        <span className="inline">
+          <Icon name="edit" size={17} className="muted" />
+          تصحيح الصفقة
+        </span>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>
+          <Icon name="close" size={15} />
+          إلغاء
+        </button>
+      </div>
+      <ErrorNote message={error} />
+
+      <div className="row">
+        <div className="field">
+          <label>التاريخ</label>
+          <input
+            type="date"
+            value={form.date}
+            onChange={(e) => setForm({ ...form, date: e.target.value })}
+            required
+          />
+        </div>
+        <div className="field">
+          <label>البائع</label>
+          <input
+            list="purchase-suppliers"
+            value={form.supplier_name}
+            onChange={(e) => setForm({ ...form, supplier_name: e.target.value })}
+            placeholder="اكتب اسم البائع"
+          />
+          <datalist id="purchase-suppliers">
+            {parties.map((party) => (
+              <option key={party.id} value={party.name} />
+            ))}
+          </datalist>
+        </div>
+        <div className="field">
+          <label>النقل</label>
+          <input
+            className="num"
+            type="number"
+            step="0.01"
+            min="0"
+            value={form.transport_cost}
+            onChange={(e) => setForm({ ...form, transport_cost: e.target.value })}
+          />
+        </div>
+        <div className="field">
+          <label>العمولة</label>
+          <input
+            className="num"
+            type="number"
+            step="0.01"
+            min="0"
+            value={form.commission_cost}
+            onChange={(e) => setForm({ ...form, commission_cost: e.target.value })}
+          />
+        </div>
+        <div className="field">
+          <label>تكاليف أخرى</label>
+          <input
+            className="num"
+            type="number"
+            step="0.01"
+            min="0"
+            value={form.other_cost}
+            onChange={(e) => setForm({ ...form, other_cost: e.target.value })}
+          />
+        </div>
+        <div className="field">
+          <label>المدفوع</label>
+          <input
+            className="num"
+            type="number"
+            step="0.01"
+            min="0"
+            value={form.paid_amount}
+            onChange={(e) => setForm({ ...form, paid_amount: e.target.value })}
+          />
+          <span className="stat-hint">اتركه فارغًا ليُعتبر مسدَّدًا بالكامل</span>
+        </div>
+      </div>
+
+      <div className="divider" />
+      <div className="section-title">أثمان الرؤوس ({purchase.items.length})</div>
+      <div className="row">
+        {purchase.items.map((item) => (
+          <div className="field" key={item.id}>
+            <label className="num">{item.animal_tag}</label>
+            <input
+              className="num"
+              type="number"
+              step="0.01"
+              min="0"
+              value={prices[item.id] ?? ""}
+              onChange={(e) => setPrices({ ...prices, [item.id]: e.target.value })}
+            />
+          </div>
+        ))}
+      </div>
+
+      <div className="alert alert-info mt-4">
+        <Icon name="info" />
+        <span>
+          المجموع الجديد {money(total, currency)} — يُعكس القيد القديم ويُكتب قيد صحيح
+          مكانه، فيبقى أثر التصحيح في الدفتر وسجل التدقيق.
+        </span>
+      </div>
+
+      <div className="form-actions">
+        <Button icon="check" busy={busy}>
+          {busy ? "جارٍ التصحيح…" : "حفظ التصحيح"}
         </Button>
       </div>
     </form>

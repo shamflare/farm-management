@@ -278,7 +278,7 @@ CATALOG_ITEMS = {
     ],
     CatalogTypeCode.SALE_REASON: [
         ("routine", "Routine sale", "بيع اعتيادي", None),
-        ("culling", "Culling", "استبعاد", None),
+        ("culling", "Culling", "نفوق", None),
         ("cash_need", "Cash need", "حاجة نقدية", None),
         ("age", "Old age", "كبر السن", None),
     ],

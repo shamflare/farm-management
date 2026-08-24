@@ -26,6 +26,9 @@ from apps.parties.services import ensure_party_accounts
 
 ZERO = Decimal("0")
 
+# يميّز «لم يُذكر هذا الحقل» عن «اجعله فارغًا»: الأول يُبقي القديم.
+UNSET = object()
+
 
 def _currency(farm, currency=None):
     return currency or farm.base_currency
@@ -585,6 +588,184 @@ def purchase_animals(
 
 
 @transaction.atomic
+@transaction.atomic
+def correct_purchase(
+    purchase,
+    *,
+    date=None,
+    prices=None,
+    supplier=UNSET,
+    transport_cost=None,
+    commission_cost=None,
+    other_cost=None,
+    paid_amount=UNSET,
+    from_account=UNSET,
+    reference=None,
+    notes=None,
+    actor=None,
+):
+    """يصحّح صفقة شراء أُدخلت بقيم خاطئة.
+
+    القيد المرحّل لا يُعدَّل في هذا النظام — يُعكس بقيد مضاد ويُكتب قيد صحيح
+    مكانه. فتبقى القصة كاملة في الدفتر: هكذا سُجّلت، وهكذا أُلغيت، وهكذا صارت.
+    محو الأول كان سيجعل الدفتر يقول إن الخطأ لم يحدث قط، وذاك تزوير لا تصحيح.
+
+    الرؤوس نفسها تبقى في الصفقة؛ ما يُصحَّح هو الأرقام: الأثمان والنقل
+    والعمولة والمدفوع والتاريخ والبائع. إضافة رأس أو إخراجه صفقة أخرى لا
+    تصحيح لهذه.
+    """
+    from apps.animals.models import AnimalEvent, AnimalEventType
+    from apps.ledger.models import EntryStatus
+    from apps.ledger.services import reverse_entry
+
+    items = list(purchase.items.select_related("animal").all())
+    if not items:
+        raise ValidationError("لا رؤوس في هذه الصفقة")
+
+    before = {
+        "animals_price": str(purchase.animals_price),
+        "transport_cost": str(purchase.transport_cost),
+        "commission_cost": str(purchase.commission_cost),
+        "other_cost": str(purchase.other_cost),
+        "total_cost": str(purchase.total_cost),
+        "paid_amount": str(purchase.paid_amount),
+        "happened_on": purchase.happened_on.isoformat(),
+        "supplier": purchase.supplier.name if purchase.supplier_id else "",
+    }
+
+    farm = purchase.farm
+    currency = purchase.currency
+    date = date or purchase.happened_on
+    prices = prices or {}
+    new_prices = [
+        to_money(prices.get(str(item.id), prices.get(item.id, item.unit_price))) for item in items
+    ]
+    if any(price < ZERO for price in new_prices):
+        raise ValidationError("الأثمان لا تكون سالبة")
+
+    transport = to_money(purchase.transport_cost if transport_cost is None else transport_cost)
+    commission = to_money(purchase.commission_cost if commission_cost is None else commission_cost)
+    other = to_money(purchase.other_cost if other_cost is None else other_cost)
+    if min(transport, commission, other) < ZERO:
+        raise ValidationError("التكاليف الإضافية لا تكون سالبة")
+
+    animals_price = sum(new_prices, ZERO)
+    extra = transport + commission + other
+    total_cost = animals_price + extra
+    if total_cost <= ZERO:
+        raise ValidationError("مجموع الصفقة يجب أن يكون أكبر من صفر")
+
+    # لم يُذكر المدفوع: يبقى كما هو، محدودًا بالمجموع الجديد إن نزل عنه.
+    if paid_amount is UNSET:
+        paid = min(to_money(purchase.paid_amount), total_cost)
+    elif paid_amount is None:
+        paid = total_cost
+    else:
+        paid = to_money(paid_amount)
+    if paid < ZERO or paid > total_cost:
+        raise ValidationError("المدفوع يكون بين صفر ومجموع الصفقة")
+    unpaid = total_cost - paid
+
+    new_supplier = purchase.supplier if supplier is UNSET else supplier
+    account = purchase.paid_from_account if from_account is UNSET else from_account
+
+    # القيد القديم يُعكس أولًا: لا يُكتب الجديد قبل أن يُلغى الأول، وإلا حُسب
+    # المبلغ مرتين للحظة بين الاثنين.
+    old_entry = purchase.journal_entry
+    if old_entry is not None and old_entry.status == EntryStatus.POSTED:
+        reverse_entry(old_entry, actor=actor, reason=f"تصحيح صفقة شراء #{old_entry.number}", date=date)
+
+    livestock = chart.get(farm, chart.LIVESTOCK)
+    allocations = _allocate(extra, new_prices)
+    allocated_costs = [price + share for price, share in zip(new_prices, allocations)]
+    animals = [item.animal for item in items]
+    lines = [
+        Line.dr(livestock, amount, memo=notes or "تصحيح شراء حيوانات", branch=branch)
+        for branch, amount in _by_branch(animals, allocated_costs)
+    ]
+
+    if paid > ZERO:
+        source = resolve_payment_source(farm, from_account=account, paid_by_party=purchase.paid_by_party)
+        lines.append(Line.cr(source, paid, memo=notes or "تصحيح شراء حيوانات"))
+    if unpaid > ZERO:
+        if new_supplier is None:
+            raise ValidationError("الباقي على المزرعة يحتاج بائعًا يُنسب إليه")
+        ensure_party_accounts(new_supplier)
+        lines.append(Line.cr(new_supplier.payable_account, unpaid, memo="باقٍ على المزرعة"))
+
+    entry = post_entry(
+        farm,
+        date=date,
+        kind=EntryKind.PURCHASE,
+        currency=currency,
+        lines=lines,
+        memo=notes or f"تصحيح شراء {len(items)} رأس",
+        reference=reference if reference is not None else purchase.reference,
+        subject_type="purchase",
+        subject_id=purchase.id,
+        actor=actor,
+    )
+
+    purchase.happened_on = date
+    purchase.supplier = new_supplier
+    purchase.animals_price = animals_price
+    purchase.transport_cost = transport
+    purchase.commission_cost = commission
+    purchase.other_cost = other
+    purchase.total_cost = total_cost
+    purchase.paid_amount = paid
+    purchase.paid_from_account = account
+    purchase.settlement_status = (
+        SettlementStatus.PAID
+        if unpaid == ZERO
+        else SettlementStatus.PARTIAL if paid > ZERO else SettlementStatus.UNPAID
+    )
+    purchase.journal_entry = entry
+    if reference is not None:
+        purchase.reference = reference
+    if notes is not None:
+        purchase.notes = notes
+    purchase.save()
+
+    for item, price, allocated in zip(items, new_prices, allocated_costs):
+        item.unit_price = price
+        item.allocated_cost = allocated
+        item.save(update_fields=["unit_price", "allocated_cost"])
+
+        animal = item.animal
+        animal.purchase_price = allocated
+        animal.entered_at = date
+        animal.save(update_fields=["purchase_price", "entered_at", "updated_at"])
+
+        # حدث الشراء في تاريخ الحيوان يقول الرقم الجديد، لا القديم الذي أُلغي.
+        AnimalEvent.objects.filter(
+            animal=animal,
+            event_type=AnimalEventType.PURCHASED,
+            data__purchase_id=str(purchase.id),
+        ).update(happened_on=date, amount=allocated, journal_entry=entry)
+
+    record(
+        AuditAction.UPDATE,
+        "animal_purchase",
+        purchase.id,
+        farm=farm,
+        label=f"تصحيح صفقة شراء إلى {total_cost} {currency.code}",
+        old=before,
+        new={
+            "animals_price": str(animals_price),
+            "transport_cost": str(transport),
+            "commission_cost": str(commission),
+            "other_cost": str(other),
+            "total_cost": str(total_cost),
+            "paid_amount": str(paid),
+            "happened_on": date.isoformat(),
+            "supplier": new_supplier.name if new_supplier else "",
+        },
+        user=actor,
+    )
+    return purchase
+
+
 def sell_animals(
     farm,
     *,

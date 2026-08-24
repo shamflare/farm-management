@@ -266,6 +266,7 @@ function SaleForm({
   const [form, setForm] = useState({
     date: today(),
     customer: "",
+    customer_name: "",
     branch: "",
     sale_reason: "",
     transport_cost: "",
@@ -315,6 +316,7 @@ function SaleForm({
       await api.post("/sales/", {
         date: form.date,
         customer: form.customer || null,
+        customer_name: form.customer_name.trim(),
         transport_cost: form.transport_cost || 0,
         commission_cost: form.commission_cost || 0,
         received_amount: form.received_amount === "" ? null : form.received_amount,
@@ -347,7 +349,7 @@ function SaleForm({
         </span>
       </div>
       <p className="page-sub mb-4">
-        اختر «استبعاد» في سبب البيع لتذهب القيمة إلى بند مبيعات الفرزة بدل مبيعات المواليد.
+        سبب البيع يحدّد بند الإيراد: «نفوق» تذهب إلى مبيعات الفرزة، وغيرها إلى مبيعات المواليد.
       </p>
       <ErrorNote message={error} />
 
@@ -374,14 +376,23 @@ function SaleForm({
             ))}
           </select>
         </div>
+        {/* الزبون يُكتب اسمه: البيع يحدث في السوق، ومن يبيع لا يفتح شاشة
+            الأشخاص ليُنشئ سجلًّا ثم يعود. الاسم الجديد يصير سجلًّا بحساباته
+            تلقائيًا، والاسم المكرّر يعود إلى سجلّه هو لا سجلّ ثانٍ يشبهه. */}
         <div className="field">
           <label>الزبون</label>
-          <select value={form.customer} onChange={(e) => setForm({ ...form, customer: e.target.value })}>
-            <option value="">—</option>
+          <input
+            list="customer-names"
+            value={form.customer_name}
+            onChange={(e) => setForm({ ...form, customer_name: e.target.value })}
+            placeholder="اكتب اسم الزبون"
+          />
+          <datalist id="customer-names">
             {customers.map((party) => (
-              <option key={party.id} value={party.id}>{party.name}</option>
+              <option key={party.id} value={party.name} />
             ))}
-          </select>
+          </datalist>
+          <span className="stat-hint">اسم جديد يُضاف إلى «الأشخاص والحسابات» وحده.</span>
         </div>
         <div className="field">
           <label>المرجع</label>

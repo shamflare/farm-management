@@ -659,6 +659,8 @@ class PurchaseCommandSerializer(serializers.Serializer):
     date = serializers.DateField()
     items = PurchaseLineSerializer(many=True)
     supplier = serializers.UUIDField(required=False, allow_null=True)
+    # ومثله البائع: يُكتب اسمه ولا يُبحث عنه في قائمة.
+    supplier_name = serializers.CharField(required=False, allow_blank=True, default="")
     transport_cost = serializers.DecimalField(max_digits=20, decimal_places=4, default=0)
     commission_cost = serializers.DecimalField(max_digits=20, decimal_places=4, default=0)
     other_cost = serializers.DecimalField(max_digits=20, decimal_places=4, default=0)
@@ -670,6 +672,34 @@ class PurchaseCommandSerializer(serializers.Serializer):
     reference = serializers.CharField(required=False, allow_blank=True, default="")
     notes = serializers.CharField(required=False, allow_blank=True, default="")
     idempotency_key = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class PurchaseCorrectionSerializer(serializers.Serializer):
+    """تصحيح أرقام صفقة قائمة — لا إضافة رأس ولا إخراجه."""
+
+    date = serializers.DateField(required=False)
+    supplier = serializers.UUIDField(required=False, allow_null=True)
+    supplier_name = serializers.CharField(required=False, allow_blank=True, default="")
+    # {معرّف البند: الثمن}
+    prices = serializers.DictField(
+        child=serializers.DecimalField(max_digits=20, decimal_places=4, min_value=Decimal("0")),
+        required=False,
+    )
+    transport_cost = serializers.DecimalField(
+        max_digits=20, decimal_places=4, required=False, min_value=Decimal("0")
+    )
+    commission_cost = serializers.DecimalField(
+        max_digits=20, decimal_places=4, required=False, min_value=Decimal("0")
+    )
+    other_cost = serializers.DecimalField(
+        max_digits=20, decimal_places=4, required=False, min_value=Decimal("0")
+    )
+    paid_amount = serializers.DecimalField(
+        max_digits=20, decimal_places=4, required=False, allow_null=True
+    )
+    from_account = serializers.UUIDField(required=False, allow_null=True)
+    reference = serializers.CharField(required=False, allow_blank=True)
+    notes = serializers.CharField(required=False, allow_blank=True)
 
 
 class SaleLineSerializer(serializers.Serializer):
@@ -684,6 +714,8 @@ class SaleCommandSerializer(serializers.Serializer):
     date = serializers.DateField()
     items = SaleLineSerializer(many=True)
     customer = serializers.UUIDField(required=False, allow_null=True)
+    # الزبون يُكتب اسمه في السوق، ويُنشأ سجلّه إن كان جديدًا.
+    customer_name = serializers.CharField(required=False, allow_blank=True, default="")
     transport_cost = serializers.DecimalField(max_digits=20, decimal_places=4, default=0)
     commission_cost = serializers.DecimalField(max_digits=20, decimal_places=4, default=0)
     received_amount = serializers.DecimalField(
