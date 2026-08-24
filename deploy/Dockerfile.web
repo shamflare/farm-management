@@ -26,6 +26,9 @@ ENV NODE_ENV=production \
 
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
+# الملفات الثابتة (الأيقونات وبيان التطبيق) لا يحملها الناتج المستقل: يخدمها
+# الخادم من public/ ويجب نسخها معه، وإلا عادت بـ 404 وحدها بينما الصفحات تعمل.
+COPY --from=build /app/public ./public
 
 EXPOSE 3000
 CMD ["node", "server.js"]
