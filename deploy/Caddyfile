@@ -37,11 +37,12 @@ www.{$DOMAIN} {
 	# فلا تمرّ بلوحة الإدارة ولا بالخادم.
 	handle /app* {
 		root * /srv/app
-		# أندرويد يرفض تثبيت ملف لا يصل بنوعه الصحيح.
-		header /*.apk Content-Type application/vnd.android.package-archive
-		header /*.apk Content-Disposition "attachment; filename=zadfarm.apk"
+		# المسار هنا قبل حذف البادئة: توجيهة header تُنفَّذ قبل uri في ترتيب
+		# Caddy، فمُطابِق `/*.apk` وحده لا يرى شيئًا. ونوع الملف يعرفه
+		# file_server وحده من الامتداد، فلا حاجة لفرضه.
+		header /app/*.apk Content-Disposition "attachment; filename=zadfarm.apk"
 		uri strip_prefix /app
-		file_server browse
+		file_server
 	}
 
 	# وكل ما عداه لوحة الإدارة.
