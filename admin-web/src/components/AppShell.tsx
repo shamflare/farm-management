@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api, clearSession, getCached, getToken } from "@/lib/api";
 import { applyTheme, FALLBACK_TOKENS, ThemeTokens } from "@/lib/theme";
+import { dismissAlert, dismissAll, visibleAlerts } from "@/lib/alerts";
 import Icon, { IconName } from "@/components/Icon";
 import QuickRecord from "@/components/QuickRecord";
 import CommandPalette from "@/components/CommandPalette";
@@ -212,12 +213,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   async function loadAlerts() {
     try {
+      // ما قُرئ لا يُعرض ثانية ما دامت حالته كما هي.
       await getCached<{ data: { alerts: Alert[] } }>("/alerts/", (data) =>
-        setAlerts(data.data.alerts)
+        setAlerts(visibleAlerts(data.data.alerts))
       );
     } catch {
       // التنبيهات خدمة إضافية؛ لا يجوز أن تمنع الشاشة من الظهور.
     }
+  }
+
+  /** إخفاء تنبيه واحد بعد قراءته. */
+  function readAlert(alert: Alert) {
+    dismissAlert(alert);
+    setAlerts((current) => current.filter((row) => row !== alert));
+  }
+
+  function readAllAlerts() {
+    dismissAll(alerts);
+    setAlerts([]);
+    setOpenMenu(null);
   }
 
   useEffect(() => {
@@ -473,7 +487,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 {openMenu === "alerts" && (
                   <div className="menu" style={{ minWidth: 320 }}>
                     <div className="menu-label">
-                      التنبيهات {alerts.length > 0 && `(${alerts.length})`}
+                      <span style={{ flex: 1 }}>
+                        التنبيهات {alerts.length > 0 && `(${alerts.length})`}
+                      </span>
+                      {alerts.length > 0 && (
+                        <button className="btn btn-ghost btn-sm" onClick={readAllAlerts}>
+                          تعليم الكل كمقروء
+                        </button>
+                      )}
                     </div>
                     {alerts.length === 0 ? (
                       <div className="empty" style={{ padding: "var(--s5)" }}>
@@ -482,18 +503,31 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     ) : (
                       <div className="menu-scroll stack-sm" style={{ padding: "var(--s1)" }}>
                         {alerts.map((alert, index) => (
-                          <Link
-                            key={index}
-                            href={alert.link || "/dashboard"}
-                            className="alert-row"
-                            onClick={closeMenu}
-                          >
-                            <span className={`alert-mark ${alert.severity}`} />
-                            <span style={{ minWidth: 0 }}>
-                              <div className="alert-row-title">{alert.title}</div>
-                              {alert.detail && <div className="stat-hint">{alert.detail}</div>}
-                            </span>
-                          </Link>
+                          <div key={index} className="alert-row-wrap">
+                            <Link
+                              href={alert.link || "/dashboard"}
+                              className="alert-row"
+                              onClick={() => {
+                                // فتحه قراءة له: من ذهب إلى مكان المشكلة رآها.
+                                readAlert(alert);
+                                closeMenu();
+                              }}
+                            >
+                              <span className={`alert-mark ${alert.severity}`} />
+                              <span style={{ minWidth: 0 }}>
+                                <div className="alert-row-title">{alert.title}</div>
+                                {alert.detail && <div className="stat-hint">{alert.detail}</div>}
+                              </span>
+                            </Link>
+                            <button
+                              className="icon-btn alert-dismiss"
+                              onClick={() => readAlert(alert)}
+                              title="إخفاء هذا التنبيه"
+                              aria-label="إخفاء التنبيه"
+                            >
+                              <Icon name="close" size={15} />
+                            </button>
+                          </div>
                         ))}
                       </div>
                     )}
