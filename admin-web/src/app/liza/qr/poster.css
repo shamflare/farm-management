@@ -1,0 +1,158 @@
+/*
+ * ملصق الحائط.
+ *
+ * يُقرأ من مترين: الرمز كبير، والسطر تحته أكبر من أي شيء آخر في الصفحة.
+ * وعند الطباعة صفحة واحدة سوداء على بيضاء — لا تدرّج ولا ظل ولا لون.
+ */
+
+.poster {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+.poster-actions {
+  width: min(720px, 100%);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.poster-sheet {
+  width: min(720px, 100%);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 40px 36px 32px;
+  text-align: center;
+  box-shadow: 0 1px 2px rgba(16, 36, 28, 0.04), 0 18px 40px -24px rgba(16, 36, 28, 0.35);
+}
+
+.poster-head h1 {
+  margin: 4px 0 0;
+  font-size: 2.4rem;
+  letter-spacing: -0.02em;
+}
+
+.poster-lead {
+  margin: 12px 0 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--yes);
+}
+
+.poster-qr {
+  margin: 26px auto 22px;
+  padding: 16px;
+  width: fit-content;
+  border: 2px solid var(--ink);
+  border-radius: 18px;
+  background: #fff;
+  line-height: 0;
+}
+
+.qr svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.poster-steps {
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+  display: grid;
+  gap: 8px;
+  max-width: 46ch;
+  text-align: start;
+}
+
+.poster-steps li {
+  counter-increment: step;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.98rem;
+  line-height: 1.9;
+}
+
+.poster-steps li::before {
+  content: counter(step);
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--yes) 12%, transparent);
+  color: var(--yes);
+  font-weight: 700;
+  font-size: 0.8rem;
+  display: grid;
+  place-items: center;
+}
+
+.poster-url {
+  margin: 22px 0 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.poster-foot {
+  margin-top: 26px;
+  padding-top: 20px;
+  border-top: 2px solid var(--line);
+}
+
+.poster-phone {
+  margin: 8px 0 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+/* --- الطباعة: صفحة واحدة، حبر أسود ---------------------------------------- */
+
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+
+  .poster {
+    padding: 0;
+    display: block;
+  }
+
+  .poster-sheet {
+    width: 100%;
+    border: 2px solid #000;
+    border-radius: 10px;
+    box-shadow: none !important;
+    padding: 26px 24px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .poster-lead,
+  .poster-url,
+  .poster-steps li::before {
+    color: #000 !important;
+  }
+
+  .poster-steps li::before {
+    background: #fff !important;
+    border: 1px solid #000;
+  }
+
+  .poster-qr {
+    border-color: #000;
+    margin: 20px auto 18px;
+  }
+
+  .poster-foot {
+    border-color: #000 !important;
+  }
+}

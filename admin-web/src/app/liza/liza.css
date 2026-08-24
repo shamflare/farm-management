@@ -225,6 +225,73 @@
   line-height: 1.8;
 }
 
+/* --- الرمز -------------------------------------------------------------- */
+
+.liza-head-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.liza-install-steps {
+  margin: 0;
+  max-width: 40ch;
+  font-size: 0.82rem;
+  line-height: 1.9;
+  color: var(--muted);
+}
+
+.liza-qr-card {
+  max-width: 1080px;
+  margin: 20px auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding: 20px 24px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+.liza-qr-text h2 {
+  margin: 0 0 6px;
+  font-size: 1.1rem;
+}
+
+.liza-qr-text p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.9;
+  max-width: 54ch;
+}
+
+.liza-qr-text a {
+  color: var(--yes);
+  font-weight: 700;
+}
+
+.liza-qr-url {
+  margin-top: 6px !important;
+  font-weight: 700;
+  font-size: 0.84rem !important;
+  letter-spacing: 0.03em;
+}
+
+.qr {
+  display: block;
+  flex-shrink: 0;
+}
+
+.qr svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 /* --- التوقيع ------------------------------------------------------------- */
 
 .liza-foot {
@@ -367,6 +434,19 @@
   .liza-foot {
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+
+  .liza-qr-card {
+    border: 1.5px solid #000 !important;
+    border-radius: 8px;
+    padding: 10px 14px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .liza-qr-text p,
+  .liza-qr-text a {
+    color: #000 !important;
   }
 
   .liza-phone a {

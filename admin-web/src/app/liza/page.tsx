@@ -1,10 +1,20 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import Link from "next/link";
+import AddToPhone from "./AddToPhone";
 import PrintActions from "./PrintActions";
+import { PAGE_URL, QrCode } from "./qr";
 import "./liza.css";
+
+/** لون شريط النظام حين تُفتح كتطبيق على الجوال. */
+export const viewport: Viewport = { themeColor: "#15803d" };
 
 export const metadata: Metadata = {
   title: "النظام الغذائي — د. ليزا حسن عبدالله",
   description: "نظام غذائي لمرضى السكري: الممنوعات، النشويات، البروتينات، الفواكه والألبان",
+  // يجعل الصفحة قابلة للوضع على شاشة الجوال كتطبيق مستقل
+  manifest: "/liza.webmanifest",
+  appleWebApp: { capable: true, title: "النظام الغذائي", statusBarStyle: "default" },
+  icons: { apple: "/liza-192.png" },
 };
 
 /**
@@ -153,7 +163,10 @@ export default function LizaPage() {
             إرشادات غذائية لمرضى السكري — تُتبع يوميًا، ويُراجَع الطبيب عند أي تغيّر.
           </p>
         </div>
-        <PrintActions />
+        <div className="liza-head-actions">
+          <PrintActions />
+          <AddToPhone />
+        </div>
       </header>
 
       <main className="liza-grid">
@@ -182,6 +195,22 @@ export default function LizaPage() {
           </section>
         ))}
       </main>
+
+      {/* الرمز في الورقة نفسها: من يطبعها يجد فيها طريق العودة إليها، ومن
+          يقرؤها على الشاشة يشاركها بتصوير مربّع واحد. */}
+      <section className="liza-qr-card">
+        <div className="liza-qr-text">
+          <h2>احملها معك</h2>
+          <p>
+            وجّه كاميرا جوالك إلى الرمز لتفتح هذه الورقة في جوالك، أو
+            <Link href="/liza/qr"> اطبع ملصق الرمز</Link> لتعليقه في العيادة.
+          </p>
+          <p className="liza-qr-url" dir="ltr">
+            {PAGE_URL}
+          </p>
+        </div>
+        <QrCode size={150} />
+      </section>
 
       <footer className="liza-foot">
         <div className="liza-signature">
