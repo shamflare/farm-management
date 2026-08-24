@@ -210,8 +210,14 @@ svg {
   /* الشريط الجانبي يُلوَّن على حدة عن البطاقات. وكل ما بداخله — عناوين
      المجموعات، الروابط، اسم الشخص — يشتقّ درجاته من لون نصّه هو، لا من نص
      الصفحة: هكذا يعمل الشريط الداكن والفاتح بالقواعد نفسها. */
-  --sidebar-muted: color-mix(in srgb, var(--color-sidebar-text) 62%, transparent);
-  --sidebar-hover: color-mix(in srgb, var(--color-sidebar-text) 8%, transparent);
+  /*
+   * اللون الذي اختارته المزرعة هو لون الروابط كما هي، لا لون تكشفه إشارة
+   * الفأرة. كان الرابط يُرسم بـ ٦٢٪ من اللون ثم يكتمل عند المرور — فيبدو
+   * الأبيض على شريط برتقالي بيجًا باهتًا، ويظنّ من اختاره أن اختياره لم
+   * يُطبَّق. والمرور يقوله الآن اختلاف الخلفية لا اختلاف اللون.
+   */
+  --sidebar-muted: color-mix(in srgb, var(--color-sidebar-text) 76%, transparent);
+  --sidebar-hover: color-mix(in srgb, var(--color-sidebar-text) 12%, transparent);
   --sidebar-line: color-mix(in srgb, var(--color-sidebar-text) 12%, transparent);
   /* لون العنصر النشط: مزيج بين لون الهوية ولون نص الشريط، فيبقى ظاهرًا على
      شريط أبيض وعلى شريط أسود معًا بدل أن يذوب في أحدهما. */
@@ -314,7 +320,7 @@ svg {
   gap: var(--s3);
   padding: calc(9px * var(--space-unit)) var(--s3);
   border-radius: var(--radius-sm);
-  color: var(--sidebar-muted);
+  color: var(--color-sidebar-text);
   font-weight: 500;
   font-size: 0.92rem;
   border: none;
@@ -329,7 +335,11 @@ svg {
   width: 19px;
   height: 19px;
   flex-shrink: 0;
-  opacity: 0.9;
+  opacity: 0.85;
+}
+
+.nav-link.active .nav-icon {
+  opacity: 1;
 }
 
 .nav-label {
@@ -342,12 +352,15 @@ svg {
 
 .nav-link:hover {
   background: var(--sidebar-hover);
-  color: var(--color-sidebar-text);
 }
 
+/*
+ * القسم المفتوح: خلفية أوضح ووزن أثقل وشريط جانبي — ثلاث إشارات لا تعتمد
+ * على لون بعينه، فيُرى على شريط أبيض كما يُرى على برتقالي أو أسود.
+ */
 .nav-link.active {
-  background: color-mix(in srgb, var(--sidebar-active) 12%, transparent);
-  color: var(--sidebar-active);
+  background: color-mix(in srgb, var(--color-sidebar-text) 16%, transparent);
+  color: var(--color-sidebar-text);
   font-weight: 700;
 }
 
@@ -641,6 +654,7 @@ svg {
   width: 32px;
   height: 32px;
   border-radius: var(--radius-pill);
+  /* داخل الشريط يأخذ لونه من الشريط؛ خارجه (في القوائم) يبقى بلون الهوية */
   background: color-mix(in srgb, var(--color-primary) 14%, transparent);
   color: var(--color-primary);
   display: grid;
@@ -666,7 +680,7 @@ svg {
 
 .identity-role {
   font-size: 0.74rem;
-  color: var(--color-text-muted);
+  color: var(--sidebar-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1962,6 +1976,12 @@ select.input {
   color: var(--color-primary);
   font-weight: 700;
   font-size: 0.78rem;
+}
+
+/* الحرف الأول داخل الشريط الجانبي: من ألوان الشريط لا من لون الهوية */
+.sidebar .avatar {
+  background: color-mix(in srgb, var(--color-sidebar-text) 16%, transparent);
+  color: var(--color-sidebar-text);
 }
 
 /* صف تنبيه: يُفتح من جسمه، ويُخفى من زر صغير في طرفه */
