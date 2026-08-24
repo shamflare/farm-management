@@ -13,7 +13,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#0F2A1D"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "net.zadfarm.app"
@@ -48,7 +50,12 @@
       ]
     ],
     "extra": {
-      "apiUrl": "https://zadfarm.net/api/v1"
-    }
+      "apiUrl": "https://zadfarm.net/api/v1",
+      "router": {},
+      "eas": {
+        "projectId": "9bcc3110-bcda-43fc-a529-5616637fef72"
+      }
+    },
+    "owner": "zadfarms-team"
   }
 }

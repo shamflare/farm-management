@@ -5,7 +5,6 @@
   },
   "build": {
     "preview": {
-      "//": "الملف الذي يُثبَّت مباشرة على الجوال — APK لا AAB، لأن AAB لا يُثبّت إلا عبر المتجر.",
       "android": {
         "buildType": "apk",
         "image": "latest"
@@ -14,7 +13,6 @@
       "distribution": "internal"
     },
     "production": {
-      "//": "نفس البناء مع رقم إصدار يزيد تلقائيًا — يُستعمل حين يصير التطبيق بيد أكثر من شخص.",
       "android": {
         "buildType": "apk",
         "image": "latest"
