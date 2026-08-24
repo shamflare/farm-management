@@ -30,7 +30,7 @@ type Kind = "expense" | "income" | "milk" | "weight";
 
 const KINDS: { key: Kind; label: string; icon: string; tone: "danger" | "success" | "info" | "primary" }[] = [
   { key: "expense", label: "مصروف", icon: "📤", tone: "danger" },
-  { key: "income", label: "إيراد", icon: "📥", tone: "success" },
+  { key: "income", label: "بيع", icon: "📥", tone: "success" },
   { key: "milk", label: "حليب", icon: "🥛", tone: "info" },
   { key: "weight", label: "وزن", icon: "⚖", tone: "primary" },
 ];
@@ -173,17 +173,20 @@ export default function RecordScreen() {
                 }}
                 style={{
                   flex: 1,
+                  flexDirection: "row",
                   alignItems: "center",
-                  gap: 4,
-                  paddingVertical: theme.space.md,
-                  paddingHorizontal: 4,
+                  justifyContent: "center",
+                  gap: 5,
+                  paddingVertical: theme.space.sm,
+                  paddingHorizontal: 2,
+                  borderRadius: 999,
                   borderColor: active ? tint : theme.colors.border,
                   backgroundColor: active
-                    ? alpha(tint, theme.isDark ? 0.2 : 0.1)
+                    ? alpha(tint, theme.isDark ? 0.22 : 0.12)
                     : theme.colors.surface,
                 }}
               >
-                <T variant="title">{item.icon}</T>
+                <T variant="small">{item.icon}</T>
                 <T variant="micro" weight={active ? "bold" : "regular"} muted={!active}>
                   {item.label}
                 </T>
@@ -266,7 +269,7 @@ export default function RecordScreen() {
                 />
               )}
               <Select
-                label={kind === "income" ? "إلى أين دخل؟" : "من أي صندوق؟"}
+                label={kind === "income" ? "إلى أي صندوق؟" : "من أي صندوق؟"}
                 value={account}
                 onChange={setAccount}
                 options={cashAccounts.map((item) => ({

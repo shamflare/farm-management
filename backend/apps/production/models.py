@@ -33,6 +33,11 @@ class MilkProduction(FarmScopedModel):
     milking_animals = models.PositiveIntegerField(
         null=True, blank=True, help_text="How many head were milked, when counted."
     )
+    # ما فسد أو انسكب من حليب هذه الحلبة. يُفصل عمّا بقي للبيت عمدًا: الأول
+    # خسارة تُعرف لتُقلَّل، والثاني اختيار. جمعهما في رقم واحد يخفي المشكلة.
+    wasted_liters = models.DecimalField(
+        max_digits=12, decimal_places=3, default=0, help_text="Litres spoiled or spilled."
+    )
     notes = models.TextField(blank=True)
 
     class Meta:

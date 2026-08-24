@@ -41,6 +41,7 @@ type Summary = {
   liters_produced: string;
   liters_sold: string;
   liters_kept: string;
+  liters_wasted?: string;
   daily_average: string;
   sales_value: string;
   days_recorded: number;
@@ -140,6 +141,26 @@ export default function MilkPage() {
 
       <ErrorNote message={error} />
 
+      {can("milk.create") && (
+        <div className="btn-row mb-4 no-print">
+          <Button
+            variant={openForm === "production" ? "primary" : "ghost"}
+            icon={openForm === "production" ? "close" : "droplet"}
+            onClick={() => setOpenForm(openForm === "production" ? "" : "production")}
+          >
+            تسجيل حلبة
+          </Button>
+          <Button
+            variant={openForm === "sale" ? "primary" : "ghost"}
+            icon={openForm === "sale" ? "close" : "banknote"}
+            onClick={() => setOpenForm(openForm === "sale" ? "" : "sale")}
+          >
+            بيع حليب أو مشتقات
+          </Button>
+        </div>
+      )}
+
+
       {summary && (
         <div className="grid grid-4 mb-4">
           <Stat
@@ -148,6 +169,17 @@ export default function MilkPage() {
             hint={`${summary.days_recorded} يوم مسجّل`}
             icon="droplet"
             tone="info"
+          />
+          <Stat
+            label="هدر"
+            value={`${formatNumber(summary.liters_wasted ?? 0, 1)} لتر`}
+            hint={
+              Number(summary.liters_wasted ?? 0) > 0
+                ? "فسد أو انسكب — خسارة تُقلَّل"
+                : "لا هدر مسجّل"
+            }
+            icon="trash"
+            tone={Number(summary.liters_wasted ?? 0) > 0 ? "danger" : "success"}
           />
           <Stat
             label="المتوسط اليومي"
@@ -169,25 +201,6 @@ export default function MilkPage() {
             icon="inbox"
             tone="accent"
           />
-        </div>
-      )}
-
-      {can("milk.create") && (
-        <div className="btn-row mb-4 no-print">
-          <Button
-            variant={openForm === "production" ? "primary" : "ghost"}
-            icon={openForm === "production" ? "close" : "droplet"}
-            onClick={() => setOpenForm(openForm === "production" ? "" : "production")}
-          >
-            تسجيل حلبة
-          </Button>
-          <Button
-            variant={openForm === "sale" ? "primary" : "ghost"}
-            icon={openForm === "sale" ? "close" : "banknote"}
-            onClick={() => setOpenForm(openForm === "sale" ? "" : "sale")}
-          >
-            بيع حليب أو مشتقات
-          </Button>
         </div>
       )}
 
@@ -298,6 +311,7 @@ function ProductionForm({
     liters: "",
     branch: "",
     milking_animals: "",
+    wasted_liters: "",
     notes: "",
   });
   const [busy, setBusy] = useState(false);
@@ -317,6 +331,7 @@ function ProductionForm({
     try {
       await api.post("/ops/milk-production/", {
         ...form,
+        wasted_liters: form.wasted_liters || 0,
         branch: form.branch || null,
         milking_animals: form.milking_animals ? Number(form.milking_animals) : null,
       });
@@ -357,6 +372,19 @@ function ProductionForm({
         <div className="field">
           <label>اللترات</label>
           <input type="number" step="0.001" value={form.liters} onChange={(e) => setForm({ ...form, liters: e.target.value })} required />
+        </div>
+        <div className="field">
+          <label>هدر (اختياري)</label>
+          <input
+            className="num"
+            type="number"
+            step="0.1"
+            min="0"
+            value={form.wasted_liters}
+            onChange={(e) => setForm({ ...form, wasted_liters: e.target.value })}
+            placeholder="0"
+          />
+          <span className="stat-hint">ما فسد أو انسكب — يُفصل عمّا بقي للبيت</span>
         </div>
         <div className="field">
           <label>عدد الحلوبات</label>

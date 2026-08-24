@@ -25,15 +25,13 @@ class DraftFreshnessTests(TestCase):
         تُعدَّل الألوان وتُنشر من جهاز، ثم تُفتح الشاشة على جهاز آخر بقيت فيه
         مسودة قديمة؛ فتغيير لون واحد ونشره كان يمحو كل ما نُشر بينهما.
         """
-        stale = Theme.objects.create(
+        # مسودة صُنعت لنشرٍ أقدم: رقم نسختها دون رقم النشر الحالي
+        Theme.objects.create(
             farm=self.farm,
             status=ThemeStatus.DRAFT,
+            version=theme_services.get_published(self.farm).version - 1,
             colors={"primary": "#166534"},
             font_family="Cairo",
-        )
-        # تُرجَع الطوابع الزمنية إلى ما قبل النشر
-        Theme.objects.filter(pk=stale.pk).update(
-            updated_at=theme_services.get_published(self.farm).published_at
         )
 
         draft = theme_services.get_draft(self.farm)

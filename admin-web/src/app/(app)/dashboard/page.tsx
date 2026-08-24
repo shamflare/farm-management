@@ -27,6 +27,10 @@ type Dashboard = {
     owed_to_farm: number;
     owed_by_farm: number;
     due_to_workers: number;
+    farm_worth?: number;
+    assets_total?: number;
+    liabilities_total?: number;
+    contributed_capital?: number;
   };
   branches: {
     branch_id: string | null;
@@ -248,6 +252,27 @@ export default function DashboardPage() {
       )}
 
       <div className="grid grid-4 mb-4">
+        {/*
+          قيمة المزرعة: ما تملكه ناقص ما عليها.
+
+          صاحب المزرعة يبني حظيرة بأربعة عشر ألفًا ثم يرى «رأس المال صفرًا»
+          فيظنّ النظام لا يحسبها. النظام يحسبها — لكنها أصل تملكه المزرعة، لا
+          رأس مال. ورأس المال هو ما وضعه صاحبها من جيبه وسُجّل. هذا الرقم يجمع
+          الاثنين في جملة واحدة: كم تساوي المزرعة اليوم.
+        */}
+        {show("cash") && (
+          <Stat
+            label="قيمة المزرعة"
+            href="/reports"
+            value={money(m.farm_worth ?? 0, currency)}
+            valueTone={(m.farm_worth ?? 0) >= 0 ? "positive" : "negative"}
+            hint={`أصول ${money(m.assets_total ?? 0, currency)} · التزامات ${money(
+              m.liabilities_total ?? 0,
+              currency
+            )}`}
+            icon="building"
+          />
+        )}
         {show("cash") && (
           <Stat
             label="النقد المتوفر"

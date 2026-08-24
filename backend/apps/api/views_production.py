@@ -72,6 +72,7 @@ class MilkProductionCommandView(CommandView):
                 branch=pick(CatalogItem, farm, data.get("branch"), "branch"),
                 session=data.get("session", "day"),
                 milking_animals=data.get("milking_animals"),
+                wasted_liters=data.get("wasted_liters") or 0,
                 notes=data.get("notes", ""),
                 actor=request.user,
             )

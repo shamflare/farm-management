@@ -34,6 +34,7 @@ def record_production(
     branch=None,
     session=Milking.DAY,
     milking_animals=None,
+    wasted_liters=0,
     notes="",
     actor=None,
 ):
@@ -41,6 +42,12 @@ def record_production(
     liters = to_quantity(liters)
     if liters < ZERO:
         raise ValidationError("litres cannot be negative")
+
+    wasted = to_quantity(wasted_liters or 0)
+    if wasted < ZERO:
+        raise ValidationError("الهدر لا يكون سالبًا")
+    if wasted > liters:
+        raise ValidationError("الهدر لا يتجاوز ما أُنتج")
 
     row, created = MilkProduction.objects.update_or_create(
         farm=farm,
@@ -50,6 +57,7 @@ def record_production(
         defaults={
             "liters": liters,
             "milking_animals": milking_animals,
+            "wasted_liters": wasted,
             "notes": notes,
         },
     )
@@ -187,10 +195,13 @@ def summary(farm, *, date_from=None, date_to=None, branch=None):
     raw_sold = sales.filter(product__code="raw_milk").aggregate(quantity=Sum("quantity"))
 
     liters_sold = raw_sold["quantity"] or ZERO
+    wasted = production.aggregate(total=Sum("wasted_liters"))["total"] or ZERO
     return {
         "liters_produced": produced,
         "liters_sold": liters_sold,
-        "liters_kept": produced - liters_sold,
+        "liters_wasted": wasted,
+        # ما لم يُبَع ولم يُهدر: بقي للبيت أو لرضاعة المواليد.
+        "liters_kept": produced - liters_sold - wasted,
         "days_recorded": days,
         "daily_average": (produced / days) if days else ZERO,
         "sales_value": sold_rows["value"] or ZERO,

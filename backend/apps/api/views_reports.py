@@ -85,6 +85,7 @@ class DashboardView(ReportView):
         animals = Animal.objects.filter(farm=farm)
         on_farm = animals.filter(is_on_farm=True)
         cash = ledger_services.cash_position(farm)
+        worth = ledger_services.farm_worth(farm)
         pl = ledger_services.profit_and_loss(farm, date_from=date_from, date_to=date_to)
 
         receivable = chart.get(farm, chart.RECEIVABLE).balance()
@@ -166,6 +167,12 @@ class DashboardView(ReportView):
                     ],
                     "income": pl["total_income"],
                     "expenses": pl["total_expenses"],
+                    # قيمة المزرعة: ما تملكه ناقص ما عليها — يشمل الحظائر
+                    # والسيارات والقطيع، لا النقد وحده.
+                    "farm_worth": worth["equity"],
+                    "assets_total": worth["assets"],
+                    "liabilities_total": worth["liabilities"],
+                    "contributed_capital": worth["contributed_capital"],
                     "net_profit": pl["net_profit"],
                     "owed_to_farm": receivable,
                     "owed_by_farm": payable,

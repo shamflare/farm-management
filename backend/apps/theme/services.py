@@ -196,11 +196,11 @@ def get_draft(farm):
     published = get_published(farm)
 
     if theme is not None:
-        stale = (
-            published is not None
-            and published.published_at is not None
-            and theme.updated_at <= published.published_at
-        )
+        # القِدَم يُقاس برقم النسخة لا بالوقت. الطوابع الزمنية تتساوى حين
+        # يقع الحفظ والنشر في نفس اللحظة — وساعة النظام أخشن مما يبدو —
+        # فتُحسب مسودة جديدة قديمةً ويُمحى ما فيها. ورقم النسخة لا يكذب:
+        # المسودة تحمل رقم النشر الذي نُسخت منه، وكل نشر يرفعه.
+        stale = published is not None and theme.version < published.version
         return copy_into_draft(theme, published) if stale else theme
 
     if published is not None:

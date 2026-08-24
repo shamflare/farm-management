@@ -183,6 +183,13 @@ export default function InventoryPage() {
 
       <ErrorNote message={error} />
 
+      <Tabs
+        value={openForm}
+        onChange={(key) => setOpenForm(openForm === key ? "" : key)}
+        options={FORMS.filter((form) => can(form.permission))}
+      />
+
+
       <div className="grid grid-4 mb-4">
         <Stat
           label="قيمة المخزون كاملًا"
@@ -202,12 +209,6 @@ export default function InventoryPage() {
           hint={lowStock.length ? "دون حد إعادة الطلب" : "كل الأصناف فوق حد الطلب"}
         />
       </div>
-
-      <Tabs
-        value={openForm}
-        onChange={(key) => setOpenForm(openForm === key ? "" : key)}
-        options={FORMS.filter((form) => can(form.permission))}
-      />
 
       {openForm === "receive" && (
         <ReceiveForm

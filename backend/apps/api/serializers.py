@@ -888,7 +888,7 @@ class MilkProductionSerializer(serializers.ModelSerializer):
         model = MilkProduction
         fields = [
             "id", "happened_on", "branch", "branch_name", "session", "liters",
-            "milking_animals", "notes", "created_at",
+            "milking_animals", "wasted_liters", "notes", "created_at",
         ]
         read_only_fields = ["id", "created_at"]
 
@@ -899,6 +899,10 @@ class MilkProductionCommandSerializer(serializers.Serializer):
     branch = serializers.UUIDField(required=False, allow_null=True)
     session = serializers.ChoiceField(
         choices=["morning", "evening", "day"], required=False, default="day"
+    )
+    # ما فسد أو انسكب — يُفصل عمّا بقي للبيت.
+    wasted_liters = serializers.DecimalField(
+        max_digits=12, decimal_places=3, required=False, min_value=Decimal("0"), default=0
     )
     milking_animals = serializers.IntegerField(required=False, allow_null=True, min_value=0)
     notes = serializers.CharField(required=False, allow_blank=True, default="")

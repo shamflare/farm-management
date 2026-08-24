@@ -478,6 +478,37 @@ def account_balances(farm, *, as_of=None, types=None, only_active=True):
     return result
 
 
+def farm_worth(farm, *, as_of=None):
+    """ما تملكه المزرعة وما عليها، وما يبقى لأصحابها.
+
+    صاحب المزرعة يسأل: «كم تساوي مزرعتي؟» فيرى رأس مال صفرًا بينما بنى
+    حظائر بأربعة عشر ألفًا، فيظنّ النظام لا يحسبها. النظام يحسبها — لكن في
+    خانة الأصول لا في خانة رأس المال: الحظيرة شيء تملكه المزرعة، ورأس المال
+    هو ما وضعه صاحبها فيها من جيبه.
+
+    والفرق بينهما هو ما يقوله هذا الرقم: أصول ناقص التزامات = حقوق الملكية،
+    وهي قيمة المزرعة الحقيقية مهما كان أصل المال الذي بناها.
+    """
+    from apps.ledger.models import Account, AccountType
+
+    def total_of(kind):
+        rows = Account.objects.filter(farm=farm, type=kind)
+        return sum((row.balance(as_of=as_of) for row in rows), ZERO)
+
+    assets = total_of(AccountType.ASSET)
+    liabilities = total_of(AccountType.LIABILITY)
+    # حقوق الملكية المسجّلة (رأس مال الشركاء ناقص مسحوباتهم) — قد تكون صفرًا
+    # في مزرعة أنفق صاحبها عليها بلا أن يسجّل إيداعًا.
+    contributed = total_of(AccountType.EQUITY)
+
+    return {
+        "assets": assets,
+        "liabilities": liabilities,
+        "equity": assets - liabilities,
+        "contributed_capital": contributed,
+    }
+
+
 def trial_balance(farm, *, as_of=None):
     """Debits and credits across the farm. They must be equal, always."""
     lines = LedgerLine.objects.filter(entry__farm=farm, entry__status=EntryStatus.POSTED)

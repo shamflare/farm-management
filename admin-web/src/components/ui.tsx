@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import Icon, { IconName } from "@/components/Icon";
 
@@ -204,7 +205,11 @@ export function TableSkeleton({ rows = 5 }: { rows?: number }) {
   return (
     <div className="skeleton-stack" style={{ padding: "var(--s4)" }}>
       {Array.from({ length: rows }).map((_, index) => (
-        <div key={index} className="skeleton" style={{ width: `${92 - index * 7}%` }} />
+        <div
+          key={index}
+          className="skeleton"
+          style={{ width: `${92 - index * 7}%` }}
+        />
       ))}
     </div>
   );
@@ -270,7 +275,13 @@ export function ExportButton({
   label?: string;
 }) {
   return (
-    <Button variant="ghost" size="sm" icon="download" onClick={onClick} className="no-print">
+    <Button
+      variant="ghost"
+      size="sm"
+      icon="download"
+      onClick={onClick}
+      className="no-print"
+    >
       {label}
     </Button>
   );
@@ -278,7 +289,13 @@ export function ExportButton({
 
 export function PrintButton({ label = "طباعة" }: { label?: string }) {
   return (
-    <Button variant="ghost" size="sm" icon="printer" onClick={() => window.print()} className="no-print">
+    <Button
+      variant="ghost"
+      size="sm"
+      icon="printer"
+      onClick={() => window.print()}
+      className="no-print"
+    >
       {label}
     </Button>
   );
@@ -306,7 +323,11 @@ export function SearchField({
       <label>{label}</label>
       <div className="search">
         <Icon name="search" />
-        <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+        />
       </div>
     </div>
   );
@@ -375,7 +396,9 @@ export function Badge({
   dot?: boolean;
 }) {
   return (
-    <span className={`badge${tone ? ` badge-${tone}` : ""}${dot ? " badge-dot" : ""}`}>
+    <span
+      className={`badge${tone ? ` badge-${tone}` : ""}${dot ? " badge-dot" : ""}`}
+    >
       {children}
     </span>
   );
@@ -399,29 +422,107 @@ export type RowAction = {
  * المهمة خارج الشاشة. الإجراء الأول يبقى ظاهرًا لأنه الأكثر استعمالًا،
  * والبقية تُفتح عند الطلب.
  */
-export function RowMenu({ actions, label = "إجراءات" }: { actions: RowAction[]; label?: string }) {
+/**
+ * قائمة إجراءات الصف.
+ *
+ * تُرسم خارج الجدول عمدًا. الجدول صندوق يتمرّر، وما يُرسم داخله يُقصّ عند
+ * حافته: كانت القائمة تظهر ثلاثة خيارات من ستة، والبقية خلف الحدّ لا تُرى ولا
+ * يُوصل إليها. فتُعلّق الآن على الصفحة نفسها بموضع محسوب من زرّها، وتنقلب إلى
+ * أعلى إن لم يبقَ تحتها مكان.
+ */
+export function RowMenu({
+  actions,
+  label = "إجراءات",
+}: {
+  actions: RowAction[];
+  label?: string;
+}) {
   const [open, setOpen] = useState(false);
+  const [spot, setSpot] = useState<{
+    top: number;
+    right: number;
+    flip: boolean;
+  } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const visible = actions.filter((action) => !action.hidden);
+
+  const place = () => {
+    const button = ref.current?.querySelector("button");
+    if (!button) return;
+    const box = button.getBoundingClientRect();
+    const height = Math.min(visible.length * 42 + 16, 320);
+    const below = window.innerHeight - box.bottom;
+    const flip = below < height + 12;
+    setSpot({
+      top: flip ? box.top - height - 6 : box.bottom + 6,
+      right: window.innerWidth - box.right,
+      flip,
+    });
+  };
 
   useEffect(() => {
     if (!open) return;
+    place();
     const onDown = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      if (ref.current?.contains(target) || menuRef.current?.contains(target))
+        return;
+      setOpen(false);
     };
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && setOpen(false);
+    const onKey = (event: KeyboardEvent) =>
+      event.key === "Escape" && setOpen(false);
+    // التمرير يُبعد الزرّ عن قائمته المعلّقة، فتُغلق بدل أن تطفو في مكان خطأ.
+    const onScroll = () => setOpen(false);
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
     return () => {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   if (!visible.length) return null;
 
+  const menu = spot && (
+    <div
+      ref={menuRef}
+      className="menu row-menu"
+      style={{
+        position: "fixed",
+        top: spot.top,
+        right: spot.right,
+        minWidth: 210,
+      }}
+    >
+      {visible.map((action) => (
+        <button
+          key={action.label}
+          className={`menu-item${action.danger ? " danger" : ""}`}
+          title={action.title}
+          onClick={() => {
+            setOpen(false);
+            action.onClick();
+          }}
+        >
+          {action.icon && <Icon name={action.icon} size={16} />}
+          {action.label}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
-    <div className="menu-anchor no-print" ref={ref} style={{ display: "inline-block" }}>
+    <div
+      className="menu-anchor no-print"
+      ref={ref}
+      style={{ display: "inline-block" }}
+    >
       <button
         className="icon-btn bordered"
         onClick={() => setOpen((value) => !value)}
@@ -431,24 +532,9 @@ export function RowMenu({ actions, label = "إجراءات" }: { actions: RowAct
       >
         <Icon name="settings" size={16} />
       </button>
-      {open && (
-        <div className="menu" style={{ minWidth: 200 }}>
-          {visible.map((action) => (
-            <button
-              key={action.label}
-              className={`menu-item${action.danger ? " danger" : ""}`}
-              title={action.title}
-              onClick={() => {
-                setOpen(false);
-                action.onClick();
-              }}
-            >
-              {action.icon && <Icon name={action.icon} size={16} />}
-              {action.label}
-            </button>
-          ))}
-        </div>
-      )}
+      {open &&
+        typeof document !== "undefined" &&
+        createPortal(menu, document.body)}
     </div>
   );
 }
