@@ -2,8 +2,18 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { api, download, formatDate, formatNumber, getCached, hasCache, money } from "@/lib/api";
+import {
+  api,
+  download,
+  formatDate,
+  formatNumber,
+  getCached,
+  hasCache,
+  money,
+} from "@/lib/api";
+import Icon from "@/components/Icon";
 import { useApp } from "@/components/AppShell";
+import { recall, remember } from "@/lib/recall";
 import {
   ErrorNote,
   ExportButton,
@@ -15,7 +25,13 @@ import {
   Toolbar,
 } from "@/components/ui";
 
-type Catalog = { id: string; code: string; display_name: string; type: string; parent: string | null };
+type Catalog = {
+  id: string;
+  code: string;
+  display_name: string;
+  type: string;
+  parent: string | null;
+};
 type Animal = {
   id: string;
   tag: string;
@@ -49,7 +65,11 @@ type Animal = {
 };
 type Page<T> = { count: number; next: string | null; results: T[] };
 
-const SEX_LABEL: Record<string, string> = { female: "أنثى", male: "ذكر", unknown: "غير محدد" };
+const SEX_LABEL: Record<string, string> = {
+  female: "أنثى",
+  male: "ذكر",
+  unknown: "غير محدد",
+};
 
 const STATUS_TONE: Record<string, string> = {
   dead: "badge-danger",
@@ -58,7 +78,12 @@ const STATUS_TONE: Record<string, string> = {
 };
 
 /** الفلاتر التي يحملها كل تبويب على حدة. الفرع ليس منها: الفرع هو التبويب. */
-type Filters = { animal_type: string; status: string; sex: string; is_on_farm: string };
+type Filters = {
+  animal_type: string;
+  status: string;
+  sex: string;
+  is_on_farm: string;
+};
 
 const BLANK: { search: string; filters: Filters } = {
   search: "",
@@ -75,13 +100,25 @@ export default function AnimalsPage() {
 
   // كل تبويب يحفظ بحثه وفلاتره لوحده: تضبط التربية على «الإناث في المزرعة»،
   // تنتقل إلى التسمين وتضبطه على «الذكور»، ثم تعود فتجد كلًّا منهما كما تركته.
-  const [tab, setTab] = useState<string>(ALL_TAB);
-  const [tabs, setTabs] = useState<Record<string, { search: string; filters: Filters }>>({});
+  // التبويب يبقى كما تركته: من يدير التسمين يفتح على التسمين، لا على «الكل»
+  // ثم ينقر كل صباح.
+  const [tab, setTab] = useState<string>(() => recall("animals_tab", ALL_TAB));
+  const [tabs, setTabs] = useState<
+    Record<string, { search: string; filters: Filters }>
+  >({});
   const view = tabs[tab] ?? BLANK;
   const { search, filters } = view;
   const patch = (next: Partial<{ search: string; filters: Filters }>) =>
-    setTabs((prev) => ({ ...prev, [tab]: { ...(prev[tab] ?? BLANK), ...next } }));
+    setTabs((prev) => ({
+      ...prev,
+      [tab]: { ...(prev[tab] ?? BLANK), ...next },
+    }));
 
+  // خمسة عشر عمودًا لا تُقرأ على شاشة حاسوب محمول. أعمدة الشراء تُظهر وتُخفى
+  // بنقرة، والاختيار يبقى — من يتابع التكاليف يبقيها، ومن يعدّ الرؤوس لا يراها.
+  const [showCost, setShowCost] = useState(
+    () => recall("animals_cost_columns", "0") === "1",
+  );
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -95,6 +132,10 @@ export default function AnimalsPage() {
 
   const branches = byType["branch"] ?? [];
   const branchId = tab === ALL_TAB ? "" : tab;
+
+  useEffect(() => {
+    remember("animals_tab", tab);
+  }, [tab]);
   const branchKeys = branches.map((branch) => branch.id).join(",");
 
   // عدد رؤوس كل فرع مكتوب على تبويبه. طلب واحد صغير لكل فرع (صفحة برأس واحد،
@@ -104,7 +145,7 @@ export default function AnimalsPage() {
     branches.forEach((branch) => {
       getCached<Page<Animal>>(
         `/animals/?page_size=1&is_on_farm=true&branch=${branch.id}`,
-        (data) => setCounts((prev) => ({ ...prev, [branch.id]: data.count }))
+        (data) => setCounts((prev) => ({ ...prev, [branch.id]: data.count })),
       ).catch(() => {});
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -113,20 +154,22 @@ export default function AnimalsPage() {
   // «مشترك» فرع للتكاليف المشتركة لا قطيع له، فلا يأخذ تبويبًا إلا إن وُجد فيه
   // رأس فعلًا — وعندها لا بد أن يكون له مكان يُفتح منه.
   const tabBranches = branches.filter(
-    (branch) => branch.code !== "shared" || (counts[branch.id] ?? 0) > 0
+    (branch) => branch.code !== "shared" || (counts[branch.id] ?? 0) > 0,
   );
 
   const query = useMemo(() => {
     const params = new URLSearchParams({ page_size: "50" });
     if (search) params.set("search", search);
     if (branchId) params.set("branch", branchId);
-    Object.entries(filters).forEach(([key, value]) => value && params.set(key, value));
+    Object.entries(filters).forEach(
+      ([key, value]) => value && params.set(key, value),
+    );
     return `/animals/?${params}`;
   }, [search, branchId, filters]);
 
   async function loadCatalog() {
     await getCached<Page<Catalog>>("/catalog/?page_size=200", (data) =>
-      setCatalog(data.results)
+      setCatalog(data.results),
     );
   }
 
@@ -157,10 +200,13 @@ export default function AnimalsPage() {
   }, [query]);
 
   const tabLabel =
-    tab === ALL_TAB ? "كل الفروع" : branches.find((item) => item.id === tab)?.display_name ?? "—";
+    tab === ALL_TAB
+      ? "كل الفروع"
+      : (branches.find((item) => item.id === tab)?.display_name ?? "—");
 
   const filtered =
-    search !== "" || Object.values(filters).some((value) => value && value !== "true");
+    search !== "" ||
+    Object.values(filters).some((value) => value && value !== "true");
 
   return (
     <>
@@ -173,12 +219,11 @@ export default function AnimalsPage() {
           <ExportButton
             onClick={() =>
               download(
-                `/export/animals/?branch=${branchId}&is_on_farm=${filters.is_on_farm}`
+                `/export/animals/?branch=${branchId}&is_on_farm=${filters.is_on_farm}`,
               ).catch((err) => setError(err.message))
             }
           />
         )}
-
       </PageHeader>
 
       {/* الفروع تبويبات لا فلترًا: فرع التربية وفرع التسمين قطيعان يُداران على
@@ -201,6 +246,19 @@ export default function AnimalsPage() {
       <ErrorNote message={error} />
 
       <Toolbar>
+        <button
+          type="button"
+          className={`btn btn-sm ${showCost ? "btn-primary" : "btn-ghost"}`}
+          onClick={() => {
+            const next = !showCost;
+            setShowCost(next);
+            remember("animals_cost_columns", next ? "1" : "0");
+          }}
+          title="إظهار أو إخفاء أعمدة الشراء والتكلفة"
+        >
+          <Icon name="coins" size={15} />
+          التكلفة
+        </button>
         <SearchField
           value={search}
           onChange={(value) => patch({ search: value })}
@@ -209,7 +267,9 @@ export default function AnimalsPage() {
         <SelectField
           label="النوع"
           value={filters.animal_type}
-          onChange={(value) => patch({ filters: { ...filters, animal_type: value } })}
+          onChange={(value) =>
+            patch({ filters: { ...filters, animal_type: value } })
+          }
         >
           <option value="">الكل</option>
           {(byType["animal_type"] ?? []).map((item) => (
@@ -221,7 +281,9 @@ export default function AnimalsPage() {
         <SelectField
           label="الحالة"
           value={filters.status}
-          onChange={(value) => patch({ filters: { ...filters, status: value } })}
+          onChange={(value) =>
+            patch({ filters: { ...filters, status: value } })
+          }
         >
           <option value="">الكل</option>
           {(byType["animal_status"] ?? []).map((item) => (
@@ -242,7 +304,9 @@ export default function AnimalsPage() {
         <SelectField
           label="الوجود"
           value={filters.is_on_farm}
-          onChange={(value) => patch({ filters: { ...filters, is_on_farm: value } })}
+          onChange={(value) =>
+            patch({ filters: { ...filters, is_on_farm: value } })
+          }
         >
           <option value="true">في المزرعة</option>
           <option value="false">خارج المزرعة</option>
@@ -264,16 +328,20 @@ export default function AnimalsPage() {
               <th>الحالة</th>
               <th>الموقع</th>
               <th>الوزن</th>
-              <th>كيف دخل</th>
-              <th>تاريخ الدخول</th>
-              <th>المورد</th>
-              <th className="num">سعر الشراء</th>
-              <th className="num">التكلفة الكاملة</th>
+              {showCost && (
+                <>
+                  <th>كيف دخل</th>
+                  <th>تاريخ الدخول</th>
+                  <th>المورد</th>
+                  <th className="num">سعر الشراء</th>
+                  <th className="num">التكلفة الكاملة</th>
+                </>
+              )}
             </tr>
           </thead>
           <tbody>
             <TableMessage
-              colSpan={15}
+              colSpan={showCost ? 15 : 10}
               loading={loading}
               empty={rows.length === 0}
               emptyTitle={filtered ? "لا نتائج مطابقة" : "لا حيوانات بعد"}
@@ -294,7 +362,9 @@ export default function AnimalsPage() {
                   <td>{animal.name || "—"}</td>
                   <td>
                     {animal.branch_name ? (
-                      <span className="badge badge-muted">{animal.branch_name}</span>
+                      <span className="badge badge-muted">
+                        {animal.branch_name}
+                      </span>
                     ) : (
                       <span className="muted">غير محدد</span>
                     )}
@@ -304,31 +374,43 @@ export default function AnimalsPage() {
                   <td>{SEX_LABEL[animal.sex] ?? animal.sex}</td>
                   <td className="num">{formatDate(animal.birth_date)}</td>
                   <td>
-                    <span className={`badge ${STATUS_TONE[animal.status_code] ?? ""}`}>
+                    <span
+                      className={`badge ${STATUS_TONE[animal.status_code] ?? ""}`}
+                    >
                       {animal.status_name}
                     </span>
                   </td>
                   <td>{animal.location_name || "—"}</td>
                   <td className="num">
-                    {animal.current_weight ? `${Number(animal.current_weight)} كغ` : "—"}
-                  </td>
-                  <td>
-                    <span className="badge badge-muted">{animal.acquisition_label}</span>
-                  </td>
-                  <td className="num">{formatDate(animal.entered_at)}</td>
-                  <td>{animal.purchase?.supplier_name || "—"}</td>
-                  <td className="num">
-                    {animal.purchase?.unit_price
-                      ? money(animal.purchase.unit_price, currency)
-                      : animal.purchase_price
-                      ? money(animal.purchase_price, currency)
+                    {animal.current_weight
+                      ? `${Number(animal.current_weight)} كغ`
                       : "—"}
                   </td>
-                  {/* التكلفة الكاملة = الثمن + حصّته من النقل والعمولة، وهي
+                  {showCost && (
+                    <>
+                      <td>
+                        <span className="badge badge-muted">
+                          {animal.acquisition_label}
+                        </span>
+                      </td>
+                      <td className="num">{formatDate(animal.entered_at)}</td>
+                      <td>{animal.purchase?.supplier_name || "—"}</td>
+                      <td className="num">
+                        {animal.purchase?.unit_price
+                          ? money(animal.purchase.unit_price, currency)
+                          : animal.purchase_price
+                            ? money(animal.purchase_price, currency)
+                            : "—"}
+                      </td>
+                      {/* التكلفة الكاملة = الثمن + حصّته من النقل والعمولة، وهي
                       الرقم الذي يُقارَن بسعر البيع لا الثمن وحده. */}
-                  <td className="num strong">
-                    {animal.purchase?.total_cost ? money(animal.purchase.total_cost, currency) : "—"}
-                  </td>
+                      <td className="num strong">
+                        {animal.purchase?.total_cost
+                          ? money(animal.purchase.total_cost, currency)
+                          : "—"}
+                      </td>
+                    </>
+                  )}
                 </tr>
               ))}
           </tbody>

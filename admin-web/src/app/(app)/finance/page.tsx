@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { api, download, formatDate, getCached, hasCache, money } from "@/lib/api";
 import { useApp } from "@/components/AppShell";
-import { recallFrom, remember } from "@/lib/recall";
+import { recall, recallFrom, remember } from "@/lib/recall";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import Icon from "@/components/Icon";
 import {
@@ -81,7 +81,7 @@ export default function FinancePage() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [kind, setKind] = useState("");
+  const [kind, setKind] = useState(() => recall("finance_kind", ""));
   const [tab, setTab] = useState<"expense" | "income" | "transfer">("expense");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -135,6 +135,7 @@ export default function FinancePage() {
   }, []);
 
   useEffect(() => {
+    remember("finance_kind", kind);
     if (!canReadBooks) {
       setLoading(false);
       return;

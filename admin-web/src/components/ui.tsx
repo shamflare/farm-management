@@ -106,10 +106,29 @@ export function ErrorNote({ message }: { message?: string }) {
   );
 }
 
+/**
+ * تأكيد الحفظ.
+ *
+ * كان يُرسم في أعلى الصفحة، والنموذج غالبًا في أسفلها: تحفظ، فتظهر الرسالة
+ * حيث لا تنظر، فتحفظ مرة ثانية ظنًّا أن شيئًا لم يحدث. صار يطفو فوق الشاشة
+ * قرب اليد ويختفي وحده بعد أربع ثوانٍ — ما يُقال بعد الفعل لا يحتاج أن يبقى.
+ *
+ * كل الشاشات تستعمله أصلًا، فتغييره هنا غيّرها كلها بلا لمسها.
+ */
 export function SuccessNote({ message }: { message?: string }) {
-  if (!message) return null;
+  const [shown, setShown] = useState(false);
+
+  useEffect(() => {
+    if (!message) return;
+    setShown(true);
+    const timer = setTimeout(() => setShown(false), 4000);
+    return () => clearTimeout(timer);
+  }, [message]);
+
+  if (!message || !shown) return null;
+
   return (
-    <div className="alert alert-ok" role="status">
+    <div className="toast" role="status" aria-live="polite">
       <Icon name="check" />
       <span>{message}</span>
     </div>

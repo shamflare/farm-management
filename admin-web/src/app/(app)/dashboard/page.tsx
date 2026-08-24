@@ -120,9 +120,69 @@ export default function DashboardPage() {
   const m = data.money;
   const a = data.animals;
 
+  /**
+   * مزرعة لم يُدخل فيها شيء بعد.
+   *
+   * لوحة مليئة بالأصفار لا تقول للمزارع الجديد ماذا يفعل — تقول له إن النظام
+   * فارغ، وهو يعرف. فتُستبدل بخطوات ثلاث مرتّبة بترتيب المزرعة نفسها: ما
+   * تملكه اليوم، ثم ما اشتريته، ثم ما تنتجه.
+   */
+  const isEmpty =
+    (a.total ?? 0) === 0 && m.cash_on_hand === 0 && m.income === 0 && m.expenses === 0;
+
+  const firstSteps = [
+    {
+      href: "/settings/opening",
+      icon: "receipt" as const,
+      title: "ابدأ بما تملكه اليوم",
+      text: "النقد والحيوانات والمباني ورأس مال الشركاء يوم بدأت — حتى تكون الأرقام صادقة من أول يوم.",
+      permission: "settings.edit",
+    },
+    {
+      href: "/purchases",
+      icon: "cart" as const,
+      title: "أدخل قطيعك",
+      text: "الحيوانات تدخل بعملية شراء تحمل قيدها المالي، أو بتسجيل ولادة من ملف الأم.",
+      permission: "purchases.view",
+    },
+    {
+      href: "/settings/lists",
+      icon: "list" as const,
+      title: "اضبط القوائم على مزرعتك",
+      text: "الفروع وبنود المصروف وأنواع الحيوان: سمِّها كما تسمّيها أنت، فالنظام يقرأ قوائمك لا قوائمه.",
+      permission: "settings.view",
+    },
+  ].filter((step) => can(step.permission));
+
   return (
     <>
       {head}
+
+      {isEmpty && firstSteps.length > 0 && (
+        <div className="card mb-4">
+          <div className="card-title">
+            <span className="inline">
+              <Icon name="sheep" size={17} className="muted" />
+              مزرعتك جاهزة وفارغة — ابدأ من هنا
+            </span>
+          </div>
+          <p className="page-sub" style={{ marginTop: 0 }}>
+            ثلاث خطوات ترتّب البداية. كل رقم بعدها يُحسب من قيود حقيقية، لا يُكتب يدويًا.
+          </p>
+          <div className="grid grid-3">
+            {firstSteps.map((step, index) => (
+              <Link key={step.href} href={step.href} className="first-step">
+                <span className="first-step-number">{index + 1}</span>
+                <span className="inline" style={{ gap: "var(--s2)" }}>
+                  <Icon name={step.icon} size={16} className="muted" />
+                  <span className="strong">{step.title}</span>
+                </span>
+                <span className="stat-hint">{step.text}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {show("alerts") && alerts.length > 0 && (
         <div className="card mb-4 no-print">

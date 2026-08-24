@@ -55,7 +55,7 @@ type NavItem = { href: string; label: string; icon: IconName; permission?: strin
  * ثم ما يُقرأ منه، وأخيرًا ما يُضبط مرة ويُنسى. الإعدادات في الأسفل عمدًا —
  * تُفتح مرة في الشهر، لا مرة في الساعة.
  */
-const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
+const NAV_GROUPS: { label: string; items: NavItem[]; foldable?: boolean }[] = [
   {
     label: "",
     items: [{ href: "/dashboard", label: "الرئيسية", icon: "home", permission: "dashboard.view" }],
@@ -101,7 +101,10 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     ],
   },
   {
+    // ستّ شاشات تُفتح مرة في الشهر كانت تحتلّ نصف القائمة كل يوم. صارت
+    // مطوية: تُفتح بنقرة، وتنفتح وحدها حين تكون داخل واحدة منها.
     label: "الإعدادات",
+    foldable: true,
     items: [
       {
         href: "/settings/opening",
@@ -168,6 +171,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [openMenu, setOpenMenu] = useState<"farm" | "user" | "alerts" | null>(null);
   const [quickOpen, setQuickOpen] = useState(false);
+  const [foldedOpen, setFoldedOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   /**
@@ -318,10 +322,30 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             {NAV_GROUPS.map((group) => {
               const items = group.items.filter((item) => canAny(item.permission));
               if (!items.length) return null;
+
+              // المجموعة المطوية تنفتح بالنقر، وتُفتح وحدها إن كنت داخلها —
+              // فلا تختفي الشاشة التي تقف عليها خلف عنوان مغلق.
+              const inside = items.some((item) => pathname?.startsWith(item.href));
+              const folded = group.foldable && !foldedOpen && !inside;
+
               return (
                 <div className="nav-group" key={group.label || "main"}>
-                  {group.label && <div className="nav-group-label">{group.label}</div>}
-                  {items.map((item) => (
+                  {group.label &&
+                    (group.foldable ? (
+                      <button
+                        type="button"
+                        className="nav-group-label as-button"
+                        onClick={() => setFoldedOpen((open) => !open)}
+                        aria-expanded={!folded}
+                      >
+                        <Icon name={folded ? "chevronDown" : "chevronUp"} size={13} />
+                        {group.label}
+                      </button>
+                    ) : (
+                      <div className="nav-group-label">{group.label}</div>
+                    ))}
+                  {!folded &&
+                    items.map((item) => (
                     <Link
                       key={item.href}
                       href={item.href}
