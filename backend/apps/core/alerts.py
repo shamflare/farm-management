@@ -165,14 +165,21 @@ def cash_position(farm):
     negative = [row for row in position["accounts"] if row["balance"] < ZERO]
     if not negative:
         return []
+    # الرصيد السالب ليس خطأ حسابيًا، بل سؤال بلا جواب: من أين جاء المال الذي
+    # صُرف؟ غالبًا وضعه صاحب المزرعة من جيبه ولم يُسجَّل، فبقي الصندوق يقول
+    # إنه أنفق ما لا يملك. التنبيه يقول ذلك ويدلّ على مكان التسجيل، بدل أن
+    # يكتفي بذكر رقم سالب يقرؤه صاحبه ولا يعرف ما يفعل به.
+    total = sum((row["balance"] for row in negative), ZERO)
     return [
         _alert(
             "negative_cash",
             Severity.DANGER,
-            f"{len(negative)} صندوق برصيد سالب",
-            "، ".join(f"{row['account'].display_name}: {row['balance']}" for row in negative),
+            f"صندوق برصيد سالب: {total}",
+            "صُرف مال لم يُسجَّل من أين جاء. إن كنت قد وضعته من جيبك فسجّله رأس مال: "
+            "الأشخاص والحسابات ← الشريك ← إيداع رأس مال. أو من الرصيد الافتتاحي إن كان "
+            "موجودًا يوم بدأت المزرعة.",
             len(negative),
-            "/finance",
+            "/parties",
         )
     ]
 
