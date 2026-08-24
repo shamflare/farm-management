@@ -77,7 +77,7 @@ const SECTIONS: Section[] = [
     title: "التمر",
     icon: "🌴",
     tone: "limit",
-    items: [{ name: "التمر", amount: "حبتان في اليوم" }],
+    items: [{ name: "التمر", amount: "ثلاث حبّات في اليوم" }],
   },
   {
     key: "protein",
