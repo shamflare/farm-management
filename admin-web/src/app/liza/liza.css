@@ -1,0 +1,347 @@
+/*
+ * ورقة النظام الغذائي.
+ *
+ * على الشاشة: بطاقات ملوّنة يُعرف نوعها من لونها قبل قراءتها.
+ * على الورق: أبيض وأسود بالكامل. الورقة تُطبع على طابعة بيت وتُعطى لمريض
+ * تلو الآخر، وخلفية ملوّنة واحدة تستهلك خرطوشة في يوم.
+ */
+
+.liza {
+  --ink: #10241c;
+  --muted: #5d6f68;
+  --line: #dfe7e3;
+  --paper: #ffffff;
+  --no: #b91c1c;
+  --yes: #15803d;
+  --limit: #b45309;
+
+  min-height: 100vh;
+  background: linear-gradient(180deg, #f2f7f4 0%, #ffffff 220px);
+  color: var(--ink);
+  font-family: "Cairo", "Segoe UI", system-ui, sans-serif;
+  padding: 28px 20px 60px;
+}
+
+.liza * {
+  box-sizing: border-box;
+}
+
+/* --- الترويسة ------------------------------------------------------------ */
+
+.liza-head {
+  max-width: 1080px;
+  margin: 0 auto 26px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding-bottom: 20px;
+  border-bottom: 2px solid var(--line);
+}
+
+.liza-eyebrow {
+  margin: 0 0 4px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--yes);
+}
+
+.liza-head h1 {
+  margin: 0;
+  font-size: 2rem;
+  letter-spacing: -0.02em;
+}
+
+.liza-sub {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  max-width: 52ch;
+  line-height: 1.8;
+}
+
+.liza-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.liza-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: var(--yes);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.92rem;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.liza-btn:hover {
+  filter: brightness(1.08);
+}
+
+.liza-btn:active {
+  transform: scale(0.99);
+}
+
+.liza-btn-ghost {
+  background: #fff;
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+.liza-hint {
+  flex-basis: 100%;
+  color: var(--limit);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+/* --- البطاقات ------------------------------------------------------------ */
+
+.liza-grid {
+  max-width: 1080px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+.liza-card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--tone, var(--yes));
+  border-radius: 16px;
+  padding: 18px 20px 20px;
+  box-shadow: 0 1px 2px rgba(16, 36, 28, 0.04), 0 12px 30px -18px rgba(16, 36, 28, 0.3);
+  break-inside: avoid;
+}
+
+.liza-card.tone-no {
+  --tone: var(--no);
+}
+
+.liza-card.tone-yes {
+  --tone: var(--yes);
+}
+
+.liza-card.tone-limit {
+  --tone: var(--limit);
+}
+
+.liza-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.liza-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+  font-size: 1.05rem;
+  flex-shrink: 0;
+}
+
+.liza-card-head h2 {
+  margin: 0;
+  font-size: 1.12rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.liza-tag {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+  color: var(--tone);
+  white-space: nowrap;
+}
+
+.liza-lead {
+  margin: 0 0 10px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--tone);
+}
+
+.liza-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.liza-items li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px dashed var(--line);
+}
+
+.liza-items li:last-child {
+  border-bottom: none;
+}
+
+.liza-item-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.94rem;
+}
+
+.liza-item-amount {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--tone);
+  white-space: nowrap;
+}
+
+.liza-note {
+  margin: 12px 0 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--tone) 7%, transparent);
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.8;
+}
+
+/* --- التوقيع ------------------------------------------------------------- */
+
+.liza-foot {
+  max-width: 1080px;
+  margin: 34px auto 0;
+  padding-top: 20px;
+  border-top: 2px solid var(--line);
+  text-align: center;
+}
+
+.liza-doctor {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.liza-title {
+  margin: 4px 0 0;
+  color: var(--yes);
+  font-weight: 600;
+  font-size: 0.94rem;
+}
+
+.liza-foot-note {
+  margin: 14px auto 0;
+  max-width: 60ch;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.9;
+}
+
+/* --- الطباعة: حبر أسود على ورق أبيض -------------------------------------- */
+
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .liza {
+    /* لا خلفيات ولا تدرّجات: كل ما هو ملوّن يصير أبيض */
+    background: #fff !important;
+    padding: 0;
+    color: #000;
+  }
+
+  .liza-card {
+    background: #fff !important;
+    border: 1.5px solid #000 !important;
+    border-radius: 8px;
+    box-shadow: none !important;
+    padding: 10px 12px 12px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .liza-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .liza-icon,
+  .liza-tag,
+  .liza-note {
+    background: #fff !important;
+    color: #000 !important;
+    border: 1px solid #000;
+  }
+
+  .liza-tag,
+  .liza-note {
+    border-radius: 4px;
+  }
+
+  .liza-eyebrow,
+  .liza-lead,
+  .liza-item-amount,
+  .liza-title,
+  .liza-sub,
+  .liza-foot-note,
+  .liza-muted {
+    color: #000 !important;
+  }
+
+  .liza-head,
+  .liza-foot {
+    border-color: #000 !important;
+  }
+
+  .liza-head h1 {
+    font-size: 1.5rem;
+  }
+
+  .liza-card-head h2 {
+    font-size: 0.98rem;
+  }
+
+  .liza-items li {
+    padding: 3px 0;
+    border-bottom: 1px dotted #000;
+  }
+
+  .liza-item-name {
+    font-size: 0.84rem;
+  }
+
+  .liza-item-amount {
+    font-size: 0.78rem;
+  }
+
+  .liza-foot {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

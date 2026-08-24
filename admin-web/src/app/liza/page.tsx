@@ -1,0 +1,198 @@
+import type { Metadata } from "next";
+import PrintActions from "./PrintActions";
+import "./liza.css";
+
+export const metadata: Metadata = {
+  title: "النظام الغذائي — د. ليزا حسن عبدالله",
+  description: "نظام غذائي لمرضى السكري: الممنوعات، النشويات، البروتينات، الفواكه والألبان",
+};
+
+/**
+ * ورقة النظام الغذائي.
+ *
+ * صفحة عامة خارج لوحة المزرعة: لا دخول ولا قائمة جانبية — تُفتح من رابط
+ * يُرسل للمريض فيقرؤها أو يطبعها.
+ *
+ * التقسيم على الشاشة بالألوان: أحمر لما يُمنع، أخضر لما يُسمح، وكهرماني لما
+ * يُسمح بمقدار. وعند الطباعة تذهب الألوان كلها ويبقى إطار أسود على أبيض —
+ * ورقة تُعطى لمريض تُطبع على طابعة بيت، والحبر الملوّن يُستهلك في يوم.
+ */
+
+type Item = { name: string; amount?: string };
+
+type Section = {
+  key: string;
+  title: string;
+  icon: string;
+  tone: "no" | "yes" | "limit";
+  lead?: string;
+  items: Item[];
+  note?: string;
+};
+
+const SECTIONS: Section[] = [
+  {
+    key: "forbidden",
+    title: "ممنوعات",
+    icon: "⛔",
+    tone: "no",
+    lead: "تُمنع تمامًا",
+    items: [
+      { name: "السكر" },
+      { name: "الشوكولا" },
+      { name: "العسل" },
+      { name: "العصائر الطبيعية والصناعية" },
+      { name: "السكاكر" },
+      { name: "البسكويت" },
+      { name: "المعلّبات" },
+      { name: "الكولا" },
+      { name: "الحلويات" },
+    ],
+  },
+  {
+    key: "starch",
+    title: "النشويات",
+    icon: "🍚",
+    tone: "limit",
+    lead: "نوع واحد فقط في اليوم",
+    items: [
+      { name: "الرز", amount: "٦ ملاعق بالوجبة" },
+      { name: "البرغل", amount: "٨ ملاعق بالوجبة" },
+      { name: "المعكرونة", amount: "٦ ملاعق بالوجبة" },
+    ],
+    note: "يُختار صنف واحد منها في اليوم، لا أكثر.",
+  },
+  {
+    key: "bread",
+    title: "الخبز",
+    icon: "🍞",
+    tone: "limit",
+    items: [
+      { name: "الخبز الأسمر — وهو المفضّل", amount: "نصف رغيف صغير بالوجبة" },
+      { name: "الخبز الأبيض", amount: "نصف رغيف بالوجبة" },
+    ],
+  },
+  {
+    key: "dates",
+    title: "التمر",
+    icon: "🌴",
+    tone: "limit",
+    items: [{ name: "التمر", amount: "حبتان في اليوم" }],
+  },
+  {
+    key: "protein",
+    title: "اللحوم والبروتينات",
+    icon: "🥩",
+    tone: "yes",
+    lead: "مسموحة",
+    items: [
+      { name: "اللحوم بأنواعها", amount: "مسموحة" },
+      { name: "السمك والتونة والسردين", amount: "مسموحة — مع التخفيف من الزيت" },
+      { name: "البقوليات", amount: "مسموحة" },
+    ],
+  },
+  {
+    key: "veg",
+    title: "الخضار",
+    icon: "🥬",
+    tone: "yes",
+    items: [{ name: "الخضار بأنواعها", amount: "مسموحة" }],
+  },
+  {
+    key: "nuts",
+    title: "المكسّرات",
+    icon: "🥜",
+    tone: "yes",
+    items: [{ name: "المكسّرات بأنواعها", amount: "مسموحة" }],
+    note: "يُفضَّل البقان (البيكان).",
+  },
+  {
+    key: "fruit",
+    title: "الفواكه",
+    icon: "🍎",
+    tone: "limit",
+    lead: "حبّتان في اليوم",
+    items: [{ name: "الفواكه الطازجة", amount: "حبّتان في اليوم — بين الوجبات" }],
+    note: "يُقلَّل قدر الإمكان من: الفواكه المجفّفة، التين، العنب، البطيخ.",
+  },
+  {
+    key: "dairy",
+    title: "الألبان والأجبان",
+    icon: "🥛",
+    tone: "limit",
+    lead: "مسموحة قليلة الدسم",
+    items: [{ name: "اللبن والجبنة قليلة الدسم", amount: "نصف شبر في اليوم" }],
+  },
+  {
+    key: "cooking",
+    title: "طريقة الطهي",
+    icon: "🔥",
+    tone: "yes",
+    items: [
+      { name: "المشوي", amount: "مفضّل" },
+      { name: "المطبوخ", amount: "مفضّل" },
+      { name: "المقالي", amount: "تُتجنَّب" },
+    ],
+  },
+];
+
+const TONE_LABEL: Record<Section["tone"], string> = {
+  no: "ممنوع",
+  yes: "مسموح",
+  limit: "بمقدار",
+};
+
+export default function LizaPage() {
+  return (
+    <div className="liza" dir="rtl">
+      <header className="liza-head">
+        <div className="liza-head-text">
+          <p className="liza-eyebrow">عيادة الغدد الصمّاء والسكري</p>
+          <h1>النظام الغذائي</h1>
+          <p className="liza-sub">
+            إرشادات غذائية لمرضى السكري — تُتبع يوميًا، ويُراجَع الطبيب عند أي تغيّر.
+          </p>
+        </div>
+        <PrintActions />
+      </header>
+
+      <main className="liza-grid">
+        {SECTIONS.map((section) => (
+          <section key={section.key} className={`liza-card tone-${section.tone}`}>
+            <div className="liza-card-head">
+              <span className="liza-icon" aria-hidden>
+                {section.icon}
+              </span>
+              <h2>{section.title}</h2>
+              <span className="liza-tag">{TONE_LABEL[section.tone]}</span>
+            </div>
+
+            {section.lead && <p className="liza-lead">{section.lead}</p>}
+
+            <ul className="liza-items">
+              {section.items.map((item) => (
+                <li key={item.name}>
+                  <span className="liza-item-name">{item.name}</span>
+                  {item.amount && <span className="liza-item-amount">{item.amount}</span>}
+                </li>
+              ))}
+            </ul>
+
+            {section.note && <p className="liza-note">{section.note}</p>}
+          </section>
+        ))}
+      </main>
+
+      <footer className="liza-foot">
+        <div className="liza-signature">
+          <p className="liza-doctor">الدكتورة ليزا حسن عبدالله</p>
+          <p className="liza-title">أخصائية الغدد الصمّاء والسكري والاستقلاب</p>
+        </div>
+        <p className="liza-foot-note">
+          هذه الورقة إرشادية وتُكمّل تعليمات الطبيب ولا تحلّ محلّها. أي دواء أو جرعة
+          تبقى بوصفة.
+        </p>
+      </footer>
+    </div>
+  );
+}
