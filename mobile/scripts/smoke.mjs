@@ -1,31 +1,79 @@
-// فحص عقد الـ API الذي يعتمد عليه التطبيق، بنفس المسارات والترويسات.
-const BASE = "https://zadfarm.net/api/v1";
-const say = (label, ok, extra = "") =>
+// يفحص كل مسار يعتمد عليه التطبيق، بنفس الترويسات التي يرسلها.
+//
+//   node scripts/smoke.mjs <كلمة مرور owner>
+//
+// الغرض: أن ينكشف مسار خاطئ هنا، لا بعد بناء APK وتثبيته على الجوال.
+const BASE = process.env.ZAD_API ?? "https://zadfarm.net/api/v1";
+const password = process.argv[2];
+
+if (!password) {
+  console.error("مطلوب: node scripts/smoke.mjs <كلمة المرور>");
+  process.exit(1);
+}
+
+let failures = 0;
+const say = (ok, label, extra = "") => {
+  if (!ok) failures += 1;
   console.log(`${ok ? "✔" : "✘"} ${label}${extra ? " — " + extra : ""}`);
+};
 
 const login = await fetch(`${BASE}/auth/login/`, {
   method: "POST",
   headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ username: "owner", password: process.argv[2] }),
+  body: JSON.stringify({ username: "owner", password }),
 });
 const session = await login.json();
-say("الدخول", login.ok, session?.user?.full_name);
+say(login.ok, "الدخول", session?.user?.full_name);
+if (!login.ok) process.exit(1);
 
-const h = { Authorization: `Bearer ${session.access}`, "X-Farm": session.farms[0].slug };
+const headers = {
+  Authorization: `Bearer ${session.access}`,
+  "X-Farm": session.farms[0].slug,
+};
 
-for (const [label, path] of [
-  ["الجلسة والسمة", "/auth/me/"],
-  ["الرئيسية", "/reports/dashboard/?period=month"],
-  ["القطيع", "/animals/?page_size=60&is_on_farm=true"],
-  ["القوائم", "/catalog/?page_size=300"],
-  ["التنبيهات", "/alerts/"],
-  ["الصناديق", "/accounts/pickable/"],
-]) {
-  const response = await fetch(BASE + path, { headers: h });
-  const body = await response.json();
-  const size = body?.count ?? body?.data?.alerts?.length ?? body?.data?.length ?? "—";
-  say(label, response.ok, `${response.status} · ${size}`);
+/** كل شاشة والمسارات التي تناديها. */
+const SCREENS = [
+  ["الجذر · الجلسة", "/auth/me/"],
+  ["الرئيسية · الأرقام", "/reports/dashboard/?period=month"],
+  ["الرئيسية · التنبيهات", "/alerts/"],
+  ["القطيع · القائمة", "/animals/?page_size=60&is_on_farm=true"],
+  ["القطيع · القوائم", "/catalog/?page_size=400"],
+  ["حيوان جديد · الرقم المقترح", "/animals/next-tag/"],
+  ["التسجيل · الصناديق", "/accounts/pickable/"],
+  ["المال · القيود", "/entries/?page_size=40"],
+  ["الأشخاص", "/parties/?page_size=100"],
+  ["الحليب · التسجيلات", "/milk/?page_size=40&ordering=-happened_on"],
+  ["الحليب · التقرير", "/reports/milk/?period=month"],
+  ["الأعلاف · الأرصدة", "/stock-balance/"],
+  ["الأعلاف · المستودعات", "/stores/?page_size=50"],
+  ["الأعلاف · الحركات", "/stock-movements/?page_size=40&ordering=-happened_on"],
+  ["المشتريات", "/purchases/?page_size=40&ordering=-happened_on"],
+  ["المبيعات", "/sales/?page_size=40&ordering=-happened_on"],
+  ["التأسيسية · البنود", "/founding-costs/?page_size=60&ordering=-happened_on"],
+  ["التأسيسية · الملخص", "/reports/founding-costs/"],
+  ["التقارير · الفروع", "/reports/branches/?period=month"],
+  ["التقارير · الأرباح", "/reports/profit-loss/?period=month"],
+  ["التقارير · الميزان", "/reports/trial-balance/"],
+  ["التقارير · النقد", "/reports/cash-flow/?period=month"],
+  ["التقارير · القطيع", "/reports/animals/"],
+  ["سجل التدقيق", "/audit/?page_size=50"],
+  ["الإعدادات · المستخدمون", "/members/?page_size=60"],
+  ["الإعدادات · أنواع القوائم", "/catalog-types/?page_size=60"],
+];
+
+for (const [label, path] of SCREENS) {
+  try {
+    const response = await fetch(BASE + path, { headers });
+    const body = await response.json().catch(() => null);
+    const size =
+      body?.count ?? body?.data?.alerts?.length ?? body?.data?.stores?.length ?? "—";
+    say(response.ok, label, `${response.status} · ${size}`);
+  } catch (error) {
+    say(false, label, String(error));
+  }
 }
 
-const me = await (await fetch(`${BASE}/auth/me/`, { headers: h })).json();
-console.log("   السمة:", me.theme.colors.primary, "·", me.theme.typography.font_family);
+console.log(
+  failures ? `\n✘ ${failures} مسار يحتاج مراجعة` : "\n✔ كل مسارات التطبيق تعمل"
+);
+process.exit(failures ? 1 : 0);

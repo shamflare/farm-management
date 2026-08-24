@@ -94,10 +94,28 @@ function Gate() {
 
   return (
     <View style={{ flex: 1 }}>
-      <Stack screenOptions={{ headerShown: false, animation: "fade_from_bottom" }}>
-        <Stack.Screen name="(auth)/login" />
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="animal/[id]" options={{ animation: "slide_from_left" }} />
+      {/* كل ما يُفتح من «المزيد» يدخل من الجانب، فالرجوع يبقى مفهومًا.
+          الشاشات الجذرية (الدخول والتبويبات) تتلاشى بلا اتجاه. */}
+      <Stack
+        screenOptions={{ headerShown: false, animation: "slide_from_left" }}
+      >
+        <Stack.Screen name="(auth)/login" options={{ animation: "fade" }} />
+        <Stack.Screen name="(tabs)" options={{ animation: "fade" }} />
+        <Stack.Screen name="animal/[id]" />
+        <Stack.Screen name="animal/new" />
+        <Stack.Screen name="money/index" />
+        <Stack.Screen name="parties/index" />
+        <Stack.Screen name="milk/index" />
+        <Stack.Screen name="inventory/index" />
+        <Stack.Screen name="purchases/index" />
+        <Stack.Screen name="sales/index" />
+        <Stack.Screen name="founding/index" />
+        <Stack.Screen name="reports/index" />
+        <Stack.Screen name="audit/index" />
+        <Stack.Screen name="settings/profile" />
+        <Stack.Screen name="settings/lists" />
+        <Stack.Screen name="settings/users" />
+        <Stack.Screen name="settings/theme" />
       </Stack>
     </View>
   );

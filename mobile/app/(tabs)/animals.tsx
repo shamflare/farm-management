@@ -1,12 +1,12 @@
 import React, { useMemo, useState } from "react";
-import { Pressable, ScrollView, TextInput, View } from "react-native";
+import { Pressable, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
 
-import { useAnimals, useCatalog } from "../../src/api/queries";
+import { useAnimals, useCan, useCatalog } from "../../src/api/queries";
 import { age, formatNumber, SEX_ICON, SEX_LABEL, statusTone } from "../../src/lib/format";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { DataCard } from "../../src/ui/cards";
-import { Body, Header, Screen } from "../../src/ui/layout";
+import { Body, Chips, Header, Screen } from "../../src/ui/layout";
 import { Badge, CardSkeleton, Empty, T } from "../../src/ui/primitives";
 
 const ALL = "all";
@@ -21,6 +21,7 @@ const ALL = "all";
 export default function AnimalsScreen() {
   const theme = useTheme();
   const router = useRouter();
+  const can = useCan();
 
   const [tab, setTab] = useState<string>(ALL);
   const [search, setSearch] = useState("");
@@ -48,6 +49,26 @@ export default function AnimalsScreen() {
         subtitle={`${formatNumber(data?.count ?? 0)} رأس · ${
           onFarm === "true" ? "في المزرعة" : "خارج المزرعة"
         }`}
+        right={
+          can("animals.create") ? (
+            <Pressable
+              onPress={() => router.push("/animal/new")}
+              hitSlop={8}
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 13,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: "rgba(255,255,255,0.18)",
+              }}
+            >
+              <T variant="title" weight="bold" color="#FFFFFF">
+                ＋
+              </T>
+            </Pressable>
+          ) : null
+        }
       />
 
       <Body onRefresh={refetch} refreshing={isRefetching}>
@@ -72,37 +93,12 @@ export default function AnimalsScreen() {
         />
 
         {/* تبويبات الفروع */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: theme.space.sm, paddingVertical: 2 }}
-        >
-          {tabs.map((item) => {
-            const active = tab === item.id;
-            return (
-              <Pressable
-                key={item.id}
-                onPress={() => setTab(item.id)}
-                style={{
-                  paddingHorizontal: theme.space.xl,
-                  paddingVertical: 9,
-                  borderRadius: 999,
-                  backgroundColor: active ? theme.colors.primary : theme.colors.surface,
-                  borderWidth: 1,
-                  borderColor: active ? theme.colors.primary : theme.colors.border,
-                }}
-              >
-                <T
-                  variant="small"
-                  weight={active ? "bold" : "regular"}
-                  color={active ? "#FFFFFF" : theme.colors.text_muted}
-                >
-                  {item.display_name}
-                </T>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        <Chips
+          value={tab}
+          onChange={setTab}
+          scroll
+          options={tabs.map((item) => ({ key: item.id, label: item.display_name }))}
+        />
 
         {/* الوجود: مفتاح واحد بدل قائمة */}
         <View style={{ flexDirection: "row", gap: theme.space.sm }}>

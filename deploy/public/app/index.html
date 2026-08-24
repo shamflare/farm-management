@@ -201,7 +201,7 @@
       </div>
 
       <div class="card">
-        <a class="cta" id="download" href="zadfarm.apk" download>
+        <a class="cta" id="download" href="/app/zadfarm.apk" download>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 3v12" />
             <path d="m7 11 5 5 5-5" />
@@ -250,7 +250,7 @@
 
     <script>
       // بيانات النسخة يكتبها سكربت النشر مع كل رفع، فالصفحة لا تحتاج تعديلًا.
-      fetch("version.json", { cache: "no-store" })
+      fetch("/app/version.json", { cache: "no-store" })
         .then(function (response) {
           if (!response.ok) throw new Error("no version");
           return response.json();
