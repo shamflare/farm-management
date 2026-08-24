@@ -102,7 +102,6 @@ function Gate() {
         <Stack.Screen name="(auth)/login" options={{ animation: "fade" }} />
         <Stack.Screen name="(tabs)" options={{ animation: "fade" }} />
         <Stack.Screen name="animal/[id]" />
-        <Stack.Screen name="animal/new" />
         <Stack.Screen name="money/index" />
         <Stack.Screen name="parties/index" />
         <Stack.Screen name="milk/index" />

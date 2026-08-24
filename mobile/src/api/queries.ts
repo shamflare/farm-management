@@ -28,6 +28,20 @@ export type Animal = {
   birth_date: string | null;
   current_weight: string | null;
   is_on_farm: boolean;
+  acquisition: string;
+  acquisition_label: string;
+  entered_at: string | null;
+  purchase_price: string | null;
+  ear_tag: string;
+  chip_number: string;
+  color: string;
+  purchase: {
+    unit_price: string;
+    total_cost: string;
+    happened_on: string | null;
+    supplier_name: string;
+    reference: string;
+  } | null;
 };
 
 export type Catalog = { id: string; code: string; display_name: string; type: string };

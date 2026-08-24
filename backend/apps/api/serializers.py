@@ -305,6 +305,15 @@ class PartySerializer(serializers.ModelSerializer):
         return party_summary(obj)
 
 
+ACQUISITION_LABELS = {
+    "born": "مولود في المزرعة",
+    "purchased": "مُشترى",
+    "gift": "هدية",
+    "opening": "موجود عند البدء",
+    "transfer": "منقول",
+}
+
+
 class AnimalListSerializer(serializers.ModelSerializer):
     type_name = serializers.CharField(source="animal_type.display_name", read_only=True)
     breed_name = serializers.CharField(source="breed.display_name", read_only=True, default="")
@@ -313,6 +322,9 @@ class AnimalListSerializer(serializers.ModelSerializer):
     location_name = serializers.CharField(source="location.display_name", read_only=True, default="")
     branch_name = serializers.CharField(source="branch.display_name", read_only=True, default="")
     branch_code = serializers.CharField(source="branch.code", read_only=True, default="")
+    acquisition_label = serializers.SerializerMethodField()
+    # ما دفعته المزرعة في هذا الرأس، ومن أين جاء.
+    purchase = serializers.SerializerMethodField()
 
     class Meta:
         model = Animal
@@ -322,7 +334,31 @@ class AnimalListSerializer(serializers.ModelSerializer):
             "sex", "birth_date", "status", "status_name", "status_code",
             "location", "location_name", "current_weight", "is_alive", "is_on_farm",
             "photo", "mother", "father",
+            "acquisition", "acquisition_label", "entered_at", "purchase_price",
+            "ear_tag", "chip_number", "color", "purchase",
         ]
+
+    def get_acquisition_label(self, obj):
+        return ACQUISITION_LABELS.get(obj.acquisition, obj.acquisition)
+
+    def get_purchase(self, obj):
+        """صفقة الشراء التي دخل بها هذا الرأس، إن كان مُشترى.
+
+        `allocated_cost` هو ثمنه محمَّلًا بحصّته من النقل والعمولة — أي تكلفته
+        الحقيقية، وهي الرقم الذي يُقارَن بسعر البيع لا سعر الشراء وحده.
+        القائمة تُجلب بـ prefetch في العرض، فلا استعلام لكل صف.
+        """
+        item = next(iter(obj.purchase_items.all()), None)
+        if item is None:
+            return None
+        purchase = item.purchase
+        return {
+            "unit_price": str(item.unit_price),
+            "total_cost": str(item.allocated_cost),
+            "happened_on": purchase.happened_on.isoformat() if purchase.happened_on else None,
+            "supplier_name": purchase.supplier.name if purchase.supplier_id else "",
+            "reference": purchase.reference,
+        }
 
 
 class AnimalSerializer(serializers.ModelSerializer):
@@ -334,6 +370,8 @@ class AnimalSerializer(serializers.ModelSerializer):
     branch_name = serializers.CharField(source="branch.display_name", read_only=True, default="")
     photo_url = serializers.SerializerMethodField()
     custom_fields = serializers.DictField(required=False)
+    acquisition_label = serializers.SerializerMethodField()
+    purchase = serializers.SerializerMethodField()
 
     class Meta:
         model = Animal
@@ -342,15 +380,72 @@ class AnimalSerializer(serializers.ModelSerializer):
             "branch", "branch_name",
             "status", "status_name", "location", "sex", "birth_date",
             "mother", "mother_tag", "father", "father_tag", "acquisition",
+            "acquisition_label", "purchase",
             "entered_at", "exited_at", "purchase_price", "purchase_currency",
             "ear_tag", "chip_number", "barcode", "color", "current_weight",
             "photo", "photo_url", "notes", "is_alive", "is_on_farm", "custom_fields",
             "created_at", "updated_at",
         ]
         read_only_fields = [
-            "id", "purchase_price", "purchase_currency", "is_alive", "is_on_farm",
-            "exited_at", "photo_url", "created_at", "updated_at",
+            "id", "is_alive", "is_on_farm", "exited_at", "photo_url",
+            "created_at", "updated_at",
         ]
+
+    def validate(self, attrs):
+        """سعر رأس دخل بصفقة شراء يقرؤه المستند، لا اليد.
+
+        تعديله هنا كان سيجعل ملف الحيوان يقول رقمًا والدفتر يقول غيره. أما
+        المولود أو الموجود عند البدء فلا مستند خلفه، فسعره يُكتب ويُصحَّح.
+        """
+        if "purchase_price" in attrs and self.instance is not None:
+            if self.instance.purchase_items.exists():
+                raise serializers.ValidationError(
+                    {
+                        "purchase_price": (
+                            "هذا الرأس دخل بصفقة شراء — سعره يُعدَّل من صفحة الشراء "
+                            "لا من هنا، كي يبقى الدفتر وملف الحيوان رقمًا واحدًا"
+                        )
+                    }
+                )
+        return attrs
+
+    def validate_tag(self, value):
+        """الرقم يُغيَّر، لكن لا يتكرّر: رقمان متطابقان يعنيان حيوانًا ضائعًا."""
+        value = (value or "").strip()
+        if not value:
+            raise serializers.ValidationError("رقم الحيوان مطلوب")
+        farm = self.instance.farm if self.instance else None
+        if farm is None:
+            from apps.api.permissions import resolve_farm
+
+            request = self.context.get("request")
+            farm = resolve_farm(request) if request else None
+        if farm is None:
+            return value
+        clash = Animal.objects.filter(farm=farm, tag=value)
+        if self.instance is not None:
+            clash = clash.exclude(pk=self.instance.pk)
+        if clash.exists():
+            raise serializers.ValidationError("هذا الرقم مستعمل لحيوان آخر في المزرعة")
+        return value
+
+    def get_acquisition_label(self, obj):
+        return ACQUISITION_LABELS.get(obj.acquisition, obj.acquisition)
+
+    def get_purchase(self, obj):
+        """الصفقة التي دخل بها هذا الرأس: ثمنه، وتكلفته الكاملة، ومن باعه."""
+        item = obj.purchase_items.select_related("purchase__supplier").first()
+        if item is None:
+            return None
+        purchase = item.purchase
+        return {
+            "id": str(purchase.id),
+            "unit_price": str(item.unit_price),
+            "total_cost": str(item.allocated_cost),
+            "happened_on": purchase.happened_on.isoformat() if purchase.happened_on else None,
+            "supplier_name": purchase.supplier.name if purchase.supplier_id else "",
+            "reference": purchase.reference,
+        }
 
     def get_photo_url(self, obj):
         """The picture chosen to represent this animal, if one was uploaded."""

@@ -34,9 +34,15 @@ def lookup(model, farm, value, field="id"):
 
 
 class AnimalViewSet(FarmScopedViewSet):
-    queryset = Animal.objects.select_related(
-        "animal_type", "branch", "breed", "status", "location", "mother", "father"
-    ).all()
+    queryset = (
+        Animal.objects.select_related(
+            "animal_type", "branch", "breed", "status", "location", "mother", "father"
+        )
+        # صفقة الشراء تُعرض في القائمة، فتُجلب معها: بلا هذا السطر يصير كل صف
+        # استعلامين، وستون رأسًا تعني مئة وعشرين استعلامًا في فتح واحد.
+        .prefetch_related("purchase_items__purchase__supplier")
+        .all()
+    )
     filterset_fields = {
         "animal_type": ["exact"],
         "branch": ["exact"],

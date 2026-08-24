@@ -20,11 +20,23 @@ import {
   Tabs,
 } from "@/components/ui";
 
+type Purchase = {
+  id: string;
+  unit_price: string;
+  total_cost: string;
+  happened_on: string | null;
+  supplier_name: string;
+  reference: string;
+};
+
 type Animal = {
   id: string;
   tag: string;
   name: string;
+  animal_type: string;
   type_name: string;
+  acquisition_label: string;
+  purchase: Purchase | null;
   breed: string | null;
   breed_name: string;
   branch: string | null;
@@ -356,6 +368,56 @@ export default function AnimalDetailPage() {
         />
       </div>
 
+      {/* من أين جاء هذا الرأس وبكم — الصفقة التي دخل بها، كما كُتبت يوم الشراء */}
+      <div className="card mb-5">
+        <div className="card-title">
+          <span className="inline">
+            <Icon name="cart" size={17} className="muted" />
+            كيف دخل هذا الرأس
+          </span>
+          <span className="badge badge-muted">{animal.acquisition_label}</span>
+        </div>
+        <div className="row">
+          <div className="field">
+            <label>تاريخ الدخول</label>
+            <div className="strong num">{formatDate(animal.entered_at)}</div>
+          </div>
+          {animal.purchase ? (
+            <>
+              <div className="field">
+                <label>المورد</label>
+                <div className="strong">{animal.purchase.supplier_name || "—"}</div>
+              </div>
+              <div className="field">
+                <label>تاريخ الصفقة</label>
+                <div className="strong num">{formatDate(animal.purchase.happened_on)}</div>
+              </div>
+              <div className="field">
+                <label>سعر الشراء</label>
+                <div className="strong num">{money(animal.purchase.unit_price, currency)}</div>
+              </div>
+              <div className="field">
+                <label>التكلفة الكاملة</label>
+                <div className="strong num">{money(animal.purchase.total_cost, currency)}</div>
+                <span className="stat-hint">الثمن + حصّته من النقل والعمولة</span>
+              </div>
+            </>
+          ) : (
+            <div className="field">
+              <label>سعر الشراء</label>
+              <div className="strong num">
+                {animal.purchase_price ? money(animal.purchase_price, currency) : "—"}
+              </div>
+              <span className="stat-hint">
+                {animal.acquisition === "born"
+                  ? "مولود في المزرعة، فلا ثمن شراء له"
+                  : "لم يدخل بصفقة شراء مسجَّلة"}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="grid grid-2">
         <div className="card">
           <div className="card-title">
@@ -648,10 +710,15 @@ function EditForm({
   onDone: () => void;
 }) {
   const [form, setForm] = useState({
+    tag: animal.tag,
     name: animal.name,
+    animal_type: animal.animal_type ?? "",
     breed: animal.breed ?? "",
+    sex: animal.sex,
     location: animal.location ?? "",
     birth_date: animal.birth_date ?? "",
+    entered_at: animal.entered_at ?? "",
+    purchase_price: animal.purchase_price ?? "",
     color: animal.color,
     ear_tag: animal.ear_tag,
     chip_number: animal.chip_number,
@@ -659,10 +726,14 @@ function EditForm({
   });
   const { busy, error, run } = useSubmit(onDone);
 
+  // ثمن رأس دخل بصفقة شراء يقرؤه المستند لا اليد: تعديله هنا كان سيجعل ملف
+  // الحيوان يقول رقمًا والدفتر يقول غيره.
+  const boughtInDeal = !!animal.purchase;
+
   return (
     <FormCard
       title="تعديل بيانات الحيوان"
-      hint="الرقم والفرع والحالة تُغيَّر من أزرارها الخاصة، فلكل منها أثر مسجَّل."
+      hint="كل ما هنا يُصحَّح بحرّية. الفرع والحالة لهما أزرارهما، لأن لكل منهما أثرًا يُسجَّل في التاريخ."
       error={error}
       busy={busy}
       label="حفظ التعديل"
@@ -671,16 +742,51 @@ function EditForm({
         run(() =>
           api.patch(`/animals/${animal.id}/`, {
             ...form,
+            tag: form.tag.trim(),
             breed: form.breed || null,
             location: form.location || null,
             birth_date: form.birth_date || null,
+            entered_at: form.entered_at || null,
+            // لا يُرسل الثمن أصلًا حين يكون خلفه مستند
+            purchase_price: boughtInDeal ? undefined : form.purchase_price || null,
           })
         );
       }}
     >
       <div className="field">
+        <label>رقم الحيوان</label>
+        <input
+          className="num"
+          value={form.tag}
+          onChange={(e) => setForm({ ...form, tag: e.target.value })}
+          required
+        />
+        <span className="stat-hint">
+          هو ما يُنادى به الحيوان في السجل كله — تغييره يغيّره في كل مكان معًا.
+        </span>
+      </div>
+      <div className="field">
         <label>الاسم</label>
         <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+      </div>
+      <div className="field">
+        <label>النوع</label>
+        <select
+          value={form.animal_type}
+          onChange={(e) => setForm({ ...form, animal_type: e.target.value })}
+        >
+          {(byType["animal_type"] ?? []).map((item) => (
+            <option key={item.id} value={item.id}>{item.display_name}</option>
+          ))}
+        </select>
+      </div>
+      <div className="field">
+        <label>الجنس</label>
+        <select value={form.sex} onChange={(e) => setForm({ ...form, sex: e.target.value })}>
+          <option value="female">أنثى</option>
+          <option value="male">ذكر</option>
+          <option value="unknown">غير محدد</option>
+        </select>
       </div>
       <div className="field">
         <label>السلالة</label>
@@ -722,6 +828,31 @@ function EditForm({
           value={form.chip_number}
           onChange={(e) => setForm({ ...form, chip_number: e.target.value })}
         />
+      </div>
+      <div className="field">
+        <label>تاريخ الدخول إلى المزرعة</label>
+        <input
+          type="date"
+          value={form.entered_at}
+          onChange={(e) => setForm({ ...form, entered_at: e.target.value })}
+        />
+      </div>
+      <div className="field">
+        <label>سعر الشراء</label>
+        <input
+          className="num"
+          type="number"
+          step="0.01"
+          min="0"
+          value={animal.purchase ? animal.purchase.unit_price : form.purchase_price}
+          onChange={(e) => setForm({ ...form, purchase_price: e.target.value })}
+          disabled={boughtInDeal}
+        />
+        <span className="stat-hint">
+          {boughtInDeal
+            ? "دخل بصفقة شراء — يُعدَّل من صفحة الشراء ليبقى الدفتر والملف رقمًا واحدًا."
+            : "لمولود أو لرأس كان موجودًا عند البدء؛ لا يُنشئ قيدًا ماليًا."}
+        </span>
       </div>
       <div className="field" style={{ flex: "3 1 320px" }}>
         <label>ملاحظات</label>

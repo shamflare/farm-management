@@ -2,8 +2,8 @@ import React, { useMemo, useState } from "react";
 import { Pressable, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
 
-import { useAnimals, useCan, useCatalog } from "../../src/api/queries";
-import { age, formatNumber, SEX_ICON, SEX_LABEL, statusTone } from "../../src/lib/format";
+import { useAnimals, useCatalog, useMe } from "../../src/api/queries";
+import { age, formatNumber, money, SEX_ICON, SEX_LABEL, statusTone } from "../../src/lib/format";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { DataCard } from "../../src/ui/cards";
 import { Body, Chips, Header, Screen } from "../../src/ui/layout";
@@ -21,12 +21,13 @@ const ALL = "all";
 export default function AnimalsScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const can = useCan();
 
   const [tab, setTab] = useState<string>(ALL);
   const [search, setSearch] = useState("");
   const [onFarm, setOnFarm] = useState("true");
 
+  const { data: me } = useMe();
+  const currency = me?.farm?.base_currency?.code ?? "USD";
   const { data: catalog } = useCatalog();
   const branches = catalog?.["branch"] ?? [];
 
@@ -49,26 +50,6 @@ export default function AnimalsScreen() {
         subtitle={`${formatNumber(data?.count ?? 0)} رأس · ${
           onFarm === "true" ? "في المزرعة" : "خارج المزرعة"
         }`}
-        right={
-          can("animals.create") ? (
-            <Pressable
-              onPress={() => router.push("/animal/new")}
-              hitSlop={8}
-              style={{
-                width: 38,
-                height: 38,
-                borderRadius: 13,
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor: "rgba(255,255,255,0.18)",
-              }}
-            >
-              <T variant="title" weight="bold" color="#FFFFFF">
-                ＋
-              </T>
-            </Pressable>
-          ) : null
-        }
       />
 
       <Body onRefresh={refetch} refreshing={isRefetching}>
@@ -145,7 +126,7 @@ export default function AnimalsScreen() {
             text={
               search
                 ? "جرّب رقمًا آخر أو امسح البحث."
-                : "أضف أول رأس من زر التسجيل في الأسفل."
+                : "الحيوانات تدخل من عملية شراء أو من تسجيل ولادة."
             }
           />
         ) : (
@@ -164,6 +145,11 @@ export default function AnimalsScreen() {
                   ? [{ icon: "⚖", label: `${formatNumber(animal.current_weight, 1)} كغ` }]
                   : []),
                 ...(age(animal.birth_date) ? [{ icon: "🎂", label: age(animal.birth_date) }] : []),
+                // بكم دخل هذا الرأس: التكلفة الكاملة لا الثمن وحده، فهي ما
+                // يُقارَن بسعر البيع.
+                ...(animal.purchase
+                  ? [{ icon: "💵", label: money(animal.purchase.total_cost, currency) }]
+                  : []),
               ]}
             />
           ))
